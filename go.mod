@@ -1,14 +1,14 @@
-module github.com/brendanjhnsn/go-api
+module github.com/brendanjhnsn/TrackerAPI
 
 go 1.22
 
 require (
-	github.com/brendanjhnsn/go-api/core v0.0.0
-	github.com/brendanjhnsn/go-api/modules/dailymessages v0.0.0
-	github.com/brendanjhnsn/go-api/modules/loa v0.0.0
-	github.com/brendanjhnsn/go-api/modules/qfs v0.0.0
-	github.com/brendanjhnsn/go-api/modules/tickets v0.0.0
-	github.com/brendanjhnsn/go-api/modules/voicetime v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/core v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/dailymessages v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/loa v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/qfs v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/tickets v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/voicetime v0.0.0
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/joho/godotenv v1.5.1
 )
@@ -32,10 +32,10 @@ require (
 )
 
 replace (
-	github.com/brendanjhnsn/go-api/core => ./core
-	github.com/brendanjhnsn/go-api/modules/dailymessages => ./modules/dailymessages
-	github.com/brendanjhnsn/go-api/modules/loa => ./modules/loa
-	github.com/brendanjhnsn/go-api/modules/qfs => ./modules/qfs
-	github.com/brendanjhnsn/go-api/modules/tickets => ./modules/tickets
-	github.com/brendanjhnsn/go-api/modules/voicetime => ./modules/voicetime
+	github.com/brendanjhnsn/TrackerAPI/core => ./core
+	github.com/brendanjhnsn/TrackerAPI/modules/dailymessages => ./modules/dailymessages
+	github.com/brendanjhnsn/TrackerAPI/modules/loa => ./modules/loa
+	github.com/brendanjhnsn/TrackerAPI/modules/qfs => ./modules/qfs
+	github.com/brendanjhnsn/TrackerAPI/modules/tickets => ./modules/tickets
+	github.com/brendanjhnsn/TrackerAPI/modules/voicetime => ./modules/voicetime
 )

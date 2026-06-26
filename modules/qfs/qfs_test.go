@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/brendanjhnsn/TrackerAPI/modules/qfs"
 	"github.com/bwmarrin/discordgo"
-	"github.com/brendanjhnsn/go-api/modules/qfs"
 )
 
 var _ interface {

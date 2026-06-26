@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/brendanjhnsn/go-api/core/config"
+	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"

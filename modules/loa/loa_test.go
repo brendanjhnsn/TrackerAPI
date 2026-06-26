@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/brendanjhnsn/go-api/modules/loa"
+	"github.com/brendanjhnsn/TrackerAPI/modules/loa"
 )
 
 var _ interface{ RegisterRoutes(*http.ServeMux) } = (*loa.Module)(nil)

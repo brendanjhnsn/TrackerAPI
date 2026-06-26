@@ -1,9 +1,9 @@
-module github.com/brendanjhnsn/go-api/modules/loa
+module github.com/brendanjhnsn/TrackerAPI/modules/loa
 
 go 1.22
 
 require (
-	github.com/brendanjhnsn/go-api/core v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/core v0.0.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -22,4 +22,4 @@ require (
 	gorm.io/driver/postgres v1.6.0 // indirect
 )
 
-replace github.com/brendanjhnsn/go-api/core => ../../core
+replace github.com/brendanjhnsn/TrackerAPI/core => ../../core

@@ -27,7 +27,7 @@ type Ticket struct {
 	ID            uint       `gorm:"primaryKey"`
 	GuildID       string     `gorm:"index;not null"`
 	ChannelID     string     `gorm:"index;not null;unique"`
-	FirstRespID   string     `gorm:"index"`
+	FirstRespID   *string    `gorm:"index"`
 	FirstRespDate *time.Time `gorm:"index"`
 	FirstRespAt   *time.Time
 	ClosedAt      *time.Time

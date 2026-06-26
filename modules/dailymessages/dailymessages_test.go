@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/brendanjhnsn/TrackerAPI/modules/dailymessages"
 	"github.com/bwmarrin/discordgo"
-	"github.com/brendanjhnsn/go-api/modules/dailymessages"
 )
 
 var _ interface {

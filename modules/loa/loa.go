@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/brendanjhnsn/go-api/core/config"
-	"github.com/brendanjhnsn/go-api/core/database"
+	"github.com/brendanjhnsn/TrackerAPI/core/config"
+	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"gorm.io/gorm"
 )
 

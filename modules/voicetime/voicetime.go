@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjhnsn/go-api/core/config"
-	"github.com/brendanjhnsn/go-api/core/database"
+	"github.com/brendanjhnsn/TrackerAPI/core/config"
+	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 )

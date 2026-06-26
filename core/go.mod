@@ -1,4 +1,4 @@
-module github.com/brendanjhnsn/go-api/core
+module github.com/brendanjhnsn/TrackerAPI/core
 
 go 1.22
 
