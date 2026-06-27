@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
+	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
 	"github.com/brendanjhnsn/TrackerAPI/modules/dailymessages"
 	"github.com/brendanjhnsn/TrackerAPI/modules/loa"
 	"github.com/brendanjhnsn/TrackerAPI/modules/qfs"
@@ -37,6 +38,7 @@ func main() {
 	voiceMod   := voicetime.New(db, cfg)
 	qfsMod     := qfs.New(db, cfg)
 	dailyMod   := dailymessages.New(db, cfg)
+	authMod    := auth.New(db, cfg)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -49,10 +51,11 @@ func main() {
 	voiceMod.RegisterRoutes(mux)
 	qfsMod.RegisterRoutes(mux)
 	dailyMod.RegisterRoutes(mux)
+	authMod.RegisterRoutes(mux)
 
 	go func() {
 		log.Printf("Starting API server on port %s", cfg.ServerPort)
-		if err := http.ListenAndServe(":"+cfg.ServerPort, mux); err != nil {
+		if err := http.ListenAndServe(":"+cfg.ServerPort, authMod.Middleware(mux)); err != nil {
 			log.Fatalf("Error starting API server: %v", err)
 		}
 	}()
