@@ -35,6 +35,14 @@ func RoleFromContext(ctx context.Context) (Role, bool) {
 	return r, ok
 }
 
+type userIDKey struct{}
+
+// UserIDFromContext retrieves the Discord user ID attached by the auth middleware.
+func UserIDFromContext(ctx context.Context) (string, bool) {
+	id, ok := ctx.Value(userIDKey{}).(string)
+	return id, ok
+}
+
 // SessionStore abstracts session lookup for testability.
 type SessionStore interface {
 	FindValid(token string) (*database.Session, error)
@@ -118,7 +126,8 @@ func (m *Module) Middleware(next http.Handler) http.Handler {
 func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleFetcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if !strings.HasPrefix(path, "/api/") || (path == "/api/loa" && r.Method == http.MethodGet) {
+		isPublicLOA := path == "/api/loa" && r.Method == http.MethodGet && r.URL.Query().Get("all") == ""
+		if !strings.HasPrefix(path, "/api/") || isPublicLOA {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -151,7 +160,14 @@ func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleF
 			return
 		}
 
+		if path == "/api/loa" && r.Method == http.MethodGet && r.URL.Query().Get("all") == "true" {
+			if role != RoleManager && role != RoleDirector {
+				writeJSON(w, http.StatusForbidden, "forbidden")
+				return
+			}
+		}
 		ctx := context.WithValue(r.Context(), contextKey{}, role)
+		ctx = context.WithValue(ctx, userIDKey{}, sess.DiscordUserID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

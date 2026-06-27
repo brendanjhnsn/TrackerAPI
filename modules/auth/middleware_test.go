@@ -216,3 +216,59 @@ func TestMiddleware_AuthRoutesPassWithoutAuth(t *testing.T) {
 		t.Errorf("want 200 (pass-through), got %d", rec.Code)
 	}
 }
+
+func TestMiddleware_LOAAllParamRequiresAuth(t *testing.T) {
+	m := newTestModule("mod", "mgr", "dir")
+	store := &fakeStore{err: errors.New("not found")}
+	h := m.middleware(okHandler, store, &fakeFetcher{})
+	req := httptest.NewRequest(http.MethodGet, "/api/loa?all=true", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("want 401 for unauthenticated GET /api/loa?all=true, got %d", rec.Code)
+	}
+}
+
+func TestMiddleware_LOAAllForbidsModRole(t *testing.T) {
+	m := newTestModule("mod", "mgr", "dir")
+	fetcher := &fakeFetcher{roles: []string{"mod"}}
+	h := m.middleware(okHandler, &fakeStore{sess: validSession()}, fetcher)
+	req := httptest.NewRequest(http.MethodGet, "/api/loa?all=true", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: "tok"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("want 403 for mod GET /api/loa?all=true, got %d", rec.Code)
+	}
+}
+
+func TestMiddleware_LOAAllAllowsManagerRole(t *testing.T) {
+	m := newTestModule("mod", "mgr", "dir")
+	fetcher := &fakeFetcher{roles: []string{"mgr"}}
+	h := m.middleware(okHandler, &fakeStore{sess: validSession()}, fetcher)
+	req := httptest.NewRequest(http.MethodGet, "/api/loa?all=true", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: "tok"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("want 200 for manager GET /api/loa?all=true, got %d", rec.Code)
+	}
+}
+
+func TestMiddleware_SetsUserIDInContext(t *testing.T) {
+	m := newTestModule("mod", "mgr", "dir")
+	fetcher := &fakeFetcher{roles: []string{"mod"}}
+	var gotUserID string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUserID, _ = UserIDFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	h := m.middleware(next, &fakeStore{sess: validSession()}, fetcher)
+	req := httptest.NewRequest(http.MethodGet, "/api/tickets", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: "tok"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if gotUserID != "user123" {
+		t.Errorf("want user123 in context, got %q", gotUserID)
+	}
+}
