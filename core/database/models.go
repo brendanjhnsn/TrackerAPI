@@ -61,6 +61,7 @@ type LOA struct {
 	ID        uint       `gorm:"primaryKey"`
 	GuildID   string     `gorm:"index;not null"`
 	MemberID  string     `gorm:"index;not null"`
+	Reason    string
 	StartDate *time.Time `gorm:"index"`
 	EndDate   *time.Time `gorm:"index"`
 	CreatedAt time.Time
