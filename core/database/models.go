@@ -68,8 +68,8 @@ type LOA struct {
 }
 
 type Session struct {
-	Token         string    `gorm:"primaryKey"`
+	Token         string    `gorm:"primaryKey;type:varchar(64)"`
 	DiscordUserID string    `gorm:"not null;index"`
-	ExpiresAt     time.Time `gorm:"not null"`
+	ExpiresAt     time.Time `gorm:"not null;index"`
 	CreatedAt     time.Time
 }
