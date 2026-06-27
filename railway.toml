@@ -1,0 +1,5 @@
+[build]
+buildCommand = "go build -o out ./API"
+
+[deploy]
+startCommand = "./out"
