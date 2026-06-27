@@ -32,6 +32,32 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/auth/discord/redirect", m.handleRedirect)
 	mux.HandleFunc("/auth/discord/callback", m.handleCallback)
 	mux.HandleFunc("/auth/discord/logout", m.handleLogout)
+	mux.HandleFunc("/api/me", m.handleMe)
+}
+
+func (m *Module) handleMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	role, ok := RoleFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	userID, _ := UserIDFromContext(r.Context())
+	roleStr := "mod"
+	switch role {
+	case RoleManager:
+		roleStr = "manager"
+	case RoleDirector:
+		roleStr = "director"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"discord_user_id": userID,
+		"role":            roleStr,
+	})
 }
 
 func (m *Module) handleLogout(w http.ResponseWriter, r *http.Request) {
