@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -43,7 +44,9 @@ func (s *gormSessionStore) FindValid(token string) (*database.Session, error) {
 	var sess database.Session
 	err := s.db.Where("token = ? AND expires_at > ?", token, time.Now().UTC()).First(&sess).Error
 	if err != nil {
-		s.db.Where("token = ?", token).Delete(&database.Session{})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.db.Where("token = ?", token).Delete(&database.Session{})
+		}
 		return nil, err
 	}
 	return &sess, nil
@@ -51,27 +54,35 @@ func (s *gormSessionStore) FindValid(token string) (*database.Session, error) {
 
 // RoleFetcher retrieves a guild member's role IDs from Discord.
 type RoleFetcher interface {
-	GetMemberRoles(userID string) ([]string, error)
+	GetMemberRoles(ctx context.Context, userID string) ([]string, error)
 }
 
 type discordRoleFetcher struct {
 	botToken string
 	guildID  string
+	client   *http.Client
 }
 
 func newDiscordRoleFetcher(botToken, guildID string) RoleFetcher {
-	return &discordRoleFetcher{botToken: botToken, guildID: guildID}
+	return &discordRoleFetcher{
+		botToken: botToken,
+		guildID:  guildID,
+		client:   &http.Client{Timeout: 5 * time.Second},
+	}
 }
 
 type guildMember struct {
 	Roles []string `json:"roles"`
 }
 
-func (d *discordRoleFetcher) GetMemberRoles(userID string) ([]string, error) {
+func (d *discordRoleFetcher) GetMemberRoles(ctx context.Context, userID string) ([]string, error) {
 	url := fmt.Sprintf("https://discord.com/api/guilds/%s/members/%s", d.guildID, userID)
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("building discord request: %w", err)
+	}
 	req.Header.Set("Authorization", "Bot "+d.botToken)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := d.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +112,7 @@ func (m *Module) Middleware(next http.Handler) http.Handler {
 func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleFetcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if strings.HasPrefix(path, "/auth/") || path == "/api/loa" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		if !strings.HasPrefix(path, "/api/") {
+		if !strings.HasPrefix(path, "/api/") || path == "/api/loa" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -122,7 +129,7 @@ func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleF
 			return
 		}
 
-		roles, err := fetcher.GetMemberRoles(sess.DiscordUserID)
+		roles, err := fetcher.GetMemberRoles(r.Context(), sess.DiscordUserID)
 		if err != nil {
 			writeJSON(w, http.StatusForbidden, "forbidden")
 			return

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -25,7 +26,7 @@ type fakeFetcher struct {
 	err   error
 }
 
-func (f *fakeFetcher) GetMemberRoles(_ string) ([]string, error) {
+func (f *fakeFetcher) GetMemberRoles(_ context.Context, _ string) ([]string, error) {
 	return f.roles, f.err
 }
 
