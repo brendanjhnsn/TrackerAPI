@@ -2,17 +2,21 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"gorm.io/gorm"
 )
+
+var discordClient = &http.Client{Timeout: 10 * time.Second}
 
 type Module struct {
 	db  *gorm.DB
@@ -47,14 +51,15 @@ func (m *Module) handleRedirect(w http.ResponseWriter, r *http.Request) {
 		"https://discord.com/oauth2/authorize?client_id=%s&redirect_uri=%s&response_type=code&scope=identify&state=%s",
 		m.cfg.DiscordClientID,
 		url.QueryEscape(m.cfg.DiscordRedirectURI),
-		state,
+		url.QueryEscape(state),
 	)
 	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
 }
 
 func (m *Module) handleCallback(w http.ResponseWriter, r *http.Request) {
 	stateCookie, err := r.Cookie("oauth_state")
-	if err != nil || stateCookie.Value != r.URL.Query().Get("state") {
+	queryState := r.URL.Query().Get("state")
+	if err != nil || subtle.ConstantTimeCompare([]byte(stateCookie.Value), []byte(queryState)) != 1 {
 		http.Error(w, `{"error":"invalid state"}`, http.StatusBadRequest)
 		return
 	}
@@ -116,17 +121,26 @@ type tokenResponse struct {
 }
 
 func (m *Module) exchangeCode(r *http.Request, code string) (string, error) {
-	resp, err := http.PostForm("https://discord.com/api/oauth2/token", url.Values{
+	body := url.Values{
 		"client_id":     {m.cfg.DiscordClientID},
 		"client_secret": {m.cfg.DiscordClientSecret},
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"redirect_uri":  {m.cfg.DiscordRedirectURI},
-	})
+	}.Encode()
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://discord.com/api/oauth2/token", strings.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("building token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := discordClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("discord token endpoint returned %d", resp.StatusCode)
+	}
 	var tok tokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tok); err != nil {
 		return "", err
@@ -147,11 +161,14 @@ func (m *Module) getDiscordUserID(r *http.Request, accessToken string) (string, 
 		return "", fmt.Errorf("building discord user request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := discordClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("discord users/@me returned %d", resp.StatusCode)
+	}
 	var user discordUser
 	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
 		return "", err
