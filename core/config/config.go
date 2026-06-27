@@ -39,7 +39,7 @@ func Load() *Config {
 		DBHost:           getEnv("DB_HOST", "127.0.0.1"),
 		DBUser:           getEnv("DB_USER", "postgres"),
 		DBPassword:       getEnv("DB_PASSWORD", ""),
-		DBName:           getEnv("DB_NAME", "community_tracker"),
+		DBName:           getEnv("DB_NAME", "community_tracker2"),
 		DBPort:           getEnvAsInt("DB_PORT", 5432),
 		QFSChannelID:     getEnv("QFS_CHANNEL_ID", ""),
 		ModRoleID:        getEnv("MOD_ROLE_ID", ""),
