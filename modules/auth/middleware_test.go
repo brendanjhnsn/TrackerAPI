@@ -272,3 +272,16 @@ func TestMiddleware_SetsUserIDInContext(t *testing.T) {
 		t.Errorf("want user123 in context, got %q", gotUserID)
 	}
 }
+
+func TestMiddleware_LOAAllAllowsDirectorRole(t *testing.T) {
+	m := newTestModule("mod", "mgr", "dir")
+	fetcher := &fakeFetcher{roles: []string{"dir"}}
+	h := m.middleware(okHandler, &fakeStore{sess: validSession()}, fetcher)
+	req := httptest.NewRequest(http.MethodGet, "/api/loa?all=true", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: "tok"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("want 200 for director GET /api/loa?all=true, got %d", rec.Code)
+	}
+}
