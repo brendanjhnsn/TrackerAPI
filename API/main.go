@@ -68,7 +68,7 @@ func main() {
 
 	go func() {
 		log.Printf("Starting API server on port %s", cfg.ServerPort)
-		if err := http.ListenAndServe(":"+cfg.ServerPort, authMod.Middleware(mux)); err != nil {
+		if err := http.ListenAndServe(":"+cfg.ServerPort, corsMiddleware(cfg.FrontendURL, cfg.Environment, authMod.Middleware(mux))); err != nil {
 			log.Fatalf("Error starting API server: %v", err)
 		}
 	}()
