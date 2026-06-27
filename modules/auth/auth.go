@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -30,12 +31,30 @@ func New(db *gorm.DB, cfg *config.Config) *Module {
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/auth/discord/redirect", m.handleRedirect)
 	mux.HandleFunc("/auth/discord/callback", m.handleCallback)
+	mux.HandleFunc("/auth/discord/logout", m.handleLogout)
+}
+
+func (m *Module) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSON(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if cookie, err := r.Cookie("session"); err == nil {
+		m.db.Where("token = ?", cookie.Value).Delete(&database.Session{})
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:   "session",
+		Value:  "",
+		MaxAge: -1,
+		Path:   "/",
+	})
+	writeJSON(w, http.StatusOK, "logged out")
 }
 
 func (m *Module) handleRedirect(w http.ResponseWriter, r *http.Request) {
 	state, err := randomHex(16)
 	if err != nil {
-		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -60,7 +79,7 @@ func (m *Module) handleCallback(w http.ResponseWriter, r *http.Request) {
 	stateCookie, err := r.Cookie("oauth_state")
 	queryState := r.URL.Query().Get("state")
 	if err != nil || subtle.ConstantTimeCompare([]byte(stateCookie.Value), []byte(queryState)) != 1 {
-		http.Error(w, `{"error":"invalid state"}`, http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, "invalid state")
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -72,25 +91,25 @@ func (m *Module) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		http.Error(w, `{"error":"missing code"}`, http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, "missing code")
 		return
 	}
 
 	accessToken, err := m.exchangeCode(r, code)
 	if err != nil {
-		http.Error(w, `{"error":"token exchange failed"}`, http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, "token exchange failed")
 		return
 	}
 
 	userID, err := m.getDiscordUserID(r, accessToken)
 	if err != nil {
-		http.Error(w, `{"error":"failed to get user info"}`, http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, "failed to get user info")
 		return
 	}
 
 	sessionToken, err := randomHex(32)
 	if err != nil {
-		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
@@ -100,7 +119,7 @@ func (m *Module) handleCallback(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:     time.Now().UTC().Add(24 * time.Hour),
 	}
 	if err := m.db.Create(&sess).Error; err != nil {
-		http.Error(w, `{"error":"failed to create session"}`, http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
 
@@ -110,7 +129,7 @@ func (m *Module) handleCallback(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   86400,
 		HttpOnly: true,
 		Secure:   m.cfg.Environment == "production",
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
 	http.Redirect(w, r, m.cfg.FrontendURL, http.StatusTemporaryRedirect)
@@ -139,6 +158,7 @@ func (m *Module) exchangeCode(r *http.Request, code string) (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return "", fmt.Errorf("discord token endpoint returned %d", resp.StatusCode)
 	}
 	var tok tokenResponse
@@ -167,6 +187,7 @@ func (m *Module) getDiscordUserID(r *http.Request, accessToken string) (string, 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return "", fmt.Errorf("discord users/@me returned %d", resp.StatusCode)
 	}
 	var user discordUser

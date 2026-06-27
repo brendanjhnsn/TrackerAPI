@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -21,6 +22,9 @@ const (
 	RoleManager              // read + write
 	RoleDirector             // read + write
 )
+
+// ErrUserNotInGuild is returned by RoleFetcher when the user is not a member of the configured guild.
+var ErrUserNotInGuild = errors.New("user not in guild")
 
 type contextKey struct{}
 
@@ -88,9 +92,11 @@ func (d *discordRoleFetcher) GetMemberRoles(ctx context.Context, userID string) 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("user not in guild")
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil, ErrUserNotInGuild
 	}
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil, fmt.Errorf("discord API error: %d", resp.StatusCode)
 	}
 	var member guildMember
@@ -112,7 +118,7 @@ func (m *Module) Middleware(next http.Handler) http.Handler {
 func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleFetcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		if !strings.HasPrefix(path, "/api/") || path == "/api/loa" {
+		if !strings.HasPrefix(path, "/api/") || (path == "/api/loa" && r.Method == http.MethodGet) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -131,7 +137,11 @@ func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleF
 
 		roles, err := fetcher.GetMemberRoles(r.Context(), sess.DiscordUserID)
 		if err != nil {
-			writeJSON(w, http.StatusForbidden, "forbidden")
+			if errors.Is(err, ErrUserNotInGuild) {
+				writeJSON(w, http.StatusForbidden, "forbidden")
+			} else {
+				writeJSON(w, http.StatusServiceUnavailable, "service unavailable")
+			}
 			return
 		}
 

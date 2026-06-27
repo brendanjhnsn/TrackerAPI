@@ -76,7 +76,7 @@ func TestMiddleware_InvalidSession_Returns401(t *testing.T) {
 
 func TestMiddleware_UserNotInGuild_Returns403(t *testing.T) {
 	m := newTestModule("mod", "mgr", "dir")
-	fetcher := &fakeFetcher{err: errors.New("user not in guild")}
+	fetcher := &fakeFetcher{err: ErrUserNotInGuild}
 	h := m.middleware(okHandler, &fakeStore{sess: validSession()}, fetcher)
 	req := httptest.NewRequest(http.MethodGet, "/api/tickets", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "tok"})
@@ -190,6 +190,18 @@ func TestMiddleware_LOAPassesWithoutAuth(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Errorf("want 200 (pass-through), got %d", rec.Code)
+	}
+}
+
+func TestMiddleware_LOAPostRequiresAuth(t *testing.T) {
+	m := newTestModule("mod", "mgr", "dir")
+	store := &fakeStore{err: errors.New("not found")}
+	h := m.middleware(okHandler, store, &fakeFetcher{})
+	req := httptest.NewRequest(http.MethodPost, "/api/loa", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("want 401 for unauthenticated POST /api/loa, got %d", rec.Code)
 	}
 }
 

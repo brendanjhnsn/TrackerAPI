@@ -27,6 +27,19 @@ func main() {
 	cfg := config.Load()
 	log.Printf("Environment: %s", cfg.Environment)
 
+	if cfg.DiscordGuildID == "" {
+		log.Fatal("DISCORD_GUILD_ID is required")
+	}
+	if cfg.DiscordClientID == "" {
+		log.Fatal("DISCORD_CLIENT_ID is required")
+	}
+	if cfg.DiscordClientSecret == "" {
+		log.Fatal("DISCORD_CLIENT_SECRET is required")
+	}
+	if cfg.DiscordToken == "" {
+		log.Fatal("DISCORD_TOKEN is required")
+	}
+
 	db, sqlDB, err := database.Connect(cfg)
 	if err != nil {
 		log.Fatalf("Error connecting to database: %v", err)
