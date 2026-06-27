@@ -10,9 +10,10 @@ import (
 type Role int
 
 const (
-	RoleMod      Role = iota
-	RoleManager
-	RoleDirector
+	RoleNone     Role = iota // zero value — context key absent
+	RoleMod                  // read-only
+	RoleManager              // read + write
+	RoleDirector             // read + write
 )
 
 type contextKey struct{}
@@ -31,4 +32,4 @@ func (m *Module) Middleware(next http.Handler) http.Handler { return next }
 func (m *Module) middleware(next http.Handler, _ SessionStore, _ RoleFetcher) http.Handler {
 	return next
 }
-func (m *Module) resolveRole(_ []string) (Role, bool) { return 0, false }
+func resolveRole(_ []string, _, _, _ string) (Role, bool) { return 0, false }
