@@ -32,7 +32,6 @@ func IsMemberOnLOA(db *gorm.DB, guildID, memberID string, today time.Time) bool 
 
 func (m *Module) handleLOA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	switch r.Method {
 	case http.MethodGet:
 		m.getLOAs(w, r)
@@ -44,13 +43,21 @@ func (m *Module) handleLOA(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) getLOAs(w http.ResponseWriter, r *http.Request) {
-	now := time.Now().UTC()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	var loas []database.LOA
-	if err := m.db.Where("start_date <= ? AND end_date >= ?", today, today).Find(&loas).Error; err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
-		return
+	if r.URL.Query().Get("all") == "true" {
+		if err := m.db.Find(&loas).Error; err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
+			return
+		}
+	} else {
+		now := time.Now().UTC()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		if err := m.db.Where("start_date <= ? AND end_date >= ?", today, today).Find(&loas).Error; err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
+			return
+		}
 	}
 	if loas == nil {
 		loas = []database.LOA{}
@@ -61,6 +68,7 @@ func (m *Module) getLOAs(w http.ResponseWriter, r *http.Request) {
 type createLOARequest struct {
 	GuildID   string `json:"guild_id"`
 	MemberID  string `json:"member_id"`
+	Reason    string `json:"reason"`
 	StartDate string `json:"start_date"`
 	EndDate   string `json:"end_date"`
 }
@@ -97,6 +105,7 @@ func (m *Module) createLOA(w http.ResponseWriter, r *http.Request) {
 	loa := database.LOA{
 		GuildID:   req.GuildID,
 		MemberID:  req.MemberID,
+		Reason:    req.Reason,
 		StartDate: &startDate,
 		EndDate:   &endDate,
 	}
