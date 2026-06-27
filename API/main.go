@@ -93,7 +93,7 @@ func main() {
 		log.Fatalf("Error opening Discord connection: %v", err)
 	}
 
-	log.Println("Bot is now running. Press Ctrl+C to exit.")
+	log.Println("API is now running. Press Ctrl+C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
 	<-sc
