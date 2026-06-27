@@ -20,7 +20,14 @@ type Config struct {
 	ModRoleName      string
 	TicketCategoryID string
 	QFSChannelName   string
-	AdminCategoryID  string
+	AdminCategoryID     string
+	DiscordClientID     string
+	DiscordClientSecret string
+	DiscordRedirectURI  string
+	DiscordGuildID      string
+	ManagerRoleID       string
+	DirectorRoleID      string
+	FrontendURL         string
 }
 
 func Load() *Config {
@@ -39,7 +46,14 @@ func Load() *Config {
 		ModRoleName:      getEnv("MOD_ROLE_NAME", ""),
 		TicketCategoryID: getEnv("TICKET_CATEGORY_ID", ""),
 		QFSChannelName:   getEnv("QFS_CHANNEL_NAME", ""),
-		AdminCategoryID:  getEnv("ADMIN_CATEGORY_ID", ""),
+		AdminCategoryID:     getEnv("ADMIN_CATEGORY_ID", ""),
+		DiscordClientID:     getEnv("DISCORD_CLIENT_ID", ""),
+		DiscordClientSecret: getEnv("DISCORD_CLIENT_SECRET", ""),
+		DiscordRedirectURI:  getEnv("DISCORD_REDIRECT_URI", ""),
+		DiscordGuildID:      getEnv("DISCORD_GUILD_ID", ""),
+		ManagerRoleID:       getEnv("MANAGER_ROLE_ID", ""),
+		DirectorRoleID:      getEnv("DIRECTOR_ROLE_ID", ""),
+		FrontendURL:         getEnv("FRONTEND_URL", "http://localhost:3000"),
 	}
 }
 

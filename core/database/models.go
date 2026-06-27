@@ -66,3 +66,10 @@ type LOA struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+type Session struct {
+	Token         string    `gorm:"primaryKey"`
+	DiscordUserID string    `gorm:"not null;index"`
+	ExpiresAt     time.Time `gorm:"not null"`
+	CreatedAt     time.Time
+}
