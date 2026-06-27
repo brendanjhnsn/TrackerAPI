@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/brendanjhnsn/TrackerAPI/core v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/auth v0.0.0
 	github.com/brendanjhnsn/TrackerAPI/modules/dailymessages v0.0.0
 	github.com/brendanjhnsn/TrackerAPI/modules/loa v0.0.0
 	github.com/brendanjhnsn/TrackerAPI/modules/qfs v0.0.0
@@ -33,6 +34,7 @@ require (
 
 replace (
 	github.com/brendanjhnsn/TrackerAPI/core => ./core
+	github.com/brendanjhnsn/TrackerAPI/modules/auth => ./modules/auth
 	github.com/brendanjhnsn/TrackerAPI/modules/dailymessages => ./modules/dailymessages
 	github.com/brendanjhnsn/TrackerAPI/modules/loa => ./modules/loa
 	github.com/brendanjhnsn/TrackerAPI/modules/qfs => ./modules/qfs
