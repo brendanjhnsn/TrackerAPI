@@ -52,6 +52,8 @@ func (m *Module) handleMe(w http.ResponseWriter, r *http.Request) {
 		roleStr = "manager"
 	case RoleDirector:
 		roleStr = "director"
+	default:
+		roleStr = "mod"
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
