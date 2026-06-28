@@ -25,6 +25,7 @@ func New(db *gorm.DB, cfg *config.Config) *Module {
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/notes", m.handleNotes)
 	mux.HandleFunc("/api/training", m.handleTraining)
+	mux.HandleFunc("/api/removed-mods", m.handleRemovedMods)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -226,4 +227,57 @@ func (m *Module) updateTraining(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, training)
+}
+
+// ----- Removed Mods -----
+
+func (m *Module) handleRemovedMods(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		m.getRemovedMods(w, r)
+	case http.MethodPost:
+		m.addRemovedMod(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (m *Module) getRemovedMods(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireManagement(w, r); !ok {
+		return
+	}
+	var removed []database.RemovedMod
+	if err := m.db.Find(&removed).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if removed == nil {
+		removed = []database.RemovedMod{}
+	}
+	writeJSON(w, http.StatusOK, removed)
+}
+
+type removeModRequest struct {
+	MemberID string `json:"member_id"`
+}
+
+func (m *Module) addRemovedMod(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireManagement(w, r); !ok {
+		return
+	}
+	var req removeModRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.MemberID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "member_id is required"})
+		return
+	}
+	removed := database.RemovedMod{MemberID: req.MemberID}
+	if err := m.db.Where("member_id = ?", req.MemberID).FirstOrCreate(&removed).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove mod"})
+		return
+	}
+	writeJSON(w, http.StatusOK, removed)
 }

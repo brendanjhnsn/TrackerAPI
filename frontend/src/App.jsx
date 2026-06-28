@@ -15,18 +15,10 @@ function AppContent() {
     <div className="app">
       <Header />
       <main className="main">
-        {isManagement ? (
-          <>
-            <ManagementView />
-            <ManagementPanel />
-            <LoaForm />
-          </>
-        ) : (
-          <>
-            <TeamOverview />
-            {isLoggedIn && <LoaForm />}
-          </>
-        )}
+        <TeamOverview />
+        {isLoggedIn && <LoaForm />}
+        {isManagement && <ManagementView />}
+        {isManagement && <ManagementPanel />}
       </main>
     </div>
   );

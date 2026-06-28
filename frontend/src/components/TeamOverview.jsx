@@ -18,6 +18,11 @@ function getQueryParams(range, customStart, customEnd) {
     start.setDate(start.getDate() - 30);
     return { start_date: start.toISOString().split('T')[0], end_date: now.toISOString().split('T')[0] };
   }
+  if (range === '90d') {
+    const start = new Date(now);
+    start.setDate(start.getDate() - 90);
+    return { start_date: start.toISOString().split('T')[0], end_date: now.toISOString().split('T')[0] };
+  }
   if (range === 'custom' && customStart && customEnd) {
     return { start_date: customStart, end_date: customEnd };
   }
@@ -129,6 +134,7 @@ export default function TeamOverview() {
   const presets = [
     { key: '7d', label: 'Last 7 days' },
     { key: '30d', label: 'Last 30 days' },
+    { key: '90d', label: 'Last 90 days' },
     { key: 'all', label: 'All time' },
     { key: 'custom', label: 'Custom' },
   ];

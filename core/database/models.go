@@ -91,3 +91,9 @@ type ModTraining struct {
 	TrainingEnd   *time.Time
 	UpdatedAt     time.Time
 }
+
+type RemovedMod struct {
+	ID        uint      `gorm:"primaryKey"`
+	MemberID  string    `gorm:"uniqueIndex;not null"`
+	CreatedAt time.Time
+}

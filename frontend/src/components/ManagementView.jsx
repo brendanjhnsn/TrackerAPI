@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ModNotesTab from './ModNotesTab';
+import ModeratorsTab from './ModeratorsTab';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
-const TABS = ['Messages', 'Tickets', 'Q&A', 'Voice Hours', 'Mod Notes'];
+const TABS = ['Moderators', 'Messages', 'Tickets', 'Q&A', 'Voice Hours', 'Mod Notes'];
 const METRIC_KEY = { Messages: 'messages', Tickets: 'tickets', 'Q&A': 'qa', 'Voice Hours': 'voice' };
 
 function getQueryParams(range, customStart, customEnd) {
@@ -17,6 +18,11 @@ function getQueryParams(range, customStart, customEnd) {
   if (range === '30d') {
     const start = new Date(now);
     start.setDate(start.getDate() - 30);
+    return { start_date: start.toISOString().split('T')[0], end_date: now.toISOString().split('T')[0] };
+  }
+  if (range === '90d') {
+    const start = new Date(now);
+    start.setDate(start.getDate() - 90);
     return { start_date: start.toISOString().split('T')[0], end_date: now.toISOString().split('T')[0] };
   }
   if (range === 'custom' && customStart && customEnd) {
@@ -55,7 +61,7 @@ export default function ManagementView() {
   const { user } = useAuth();
   const isDirector = user?.role === 'director';
 
-  const [activeTab, setActiveTab] = useState('Messages');
+  const [activeTab, setActiveTab] = useState('Moderators');
   const [range, setRange] = useState('30d');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
@@ -63,14 +69,29 @@ export default function ManagementView() {
   const [loading, setLoading] = useState(false);
   const [profiles, setProfiles] = useState({});
   const [sortDir, setSortDir] = useState('desc');
+  const [removedIds, setRemovedIds] = useState(new Set());
 
   const presets = [
     { key: '7d', label: 'Last 7 days' },
     { key: '30d', label: 'Last 30 days' },
+    { key: '90d', label: 'Last 90 days' },
     { key: 'all', label: 'All time' },
     { key: 'custom', label: 'Custom' },
   ];
 
+  // Load removed mods once on mount
+  useEffect(() => {
+    fetch(`${BASE}/api/removed-mods`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => {
+        if (Array.isArray(list)) {
+          setRemovedIds(new Set(list.map(r => r.MemberID)));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch all metric data
   useEffect(() => {
     if (range === 'custom' && (!customStart || !customEnd)) return;
     const q = buildQuery(getQueryParams(range, customStart, customEnd));
@@ -93,6 +114,7 @@ export default function ManagementView() {
       .finally(() => setLoading(false));
   }, [range, customStart, customEnd]);
 
+  // Fetch profiles for all mods
   useEffect(() => {
     if (data.length === 0) return;
     const ids = data.map(d => d.member_id).filter(Boolean);
@@ -106,12 +128,30 @@ export default function ManagementView() {
       .catch(() => {});
   }, [data]);
 
+  async function handleRemoveMod(memberID) {
+    try {
+      const res = await fetch(`${BASE}/api/removed-mods`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member_id: memberID }),
+      });
+      if (res.ok) {
+        setRemovedIds(prev => new Set([...prev, memberID]));
+      }
+    } catch (_) {}
+  }
+
   function displayName(id) {
     return profiles[id]?.username || id;
   }
 
+  // Filter removed mods from all lists
+  const activeData = data.filter(d => !removedIds.has(d.member_id));
+  const activeModIds = activeData.map(d => d.member_id);
+
   const metricKey = METRIC_KEY[activeTab];
-  const sortedData = [...data].sort((a, b) => {
+  const sortedData = [...activeData].sort((a, b) => {
     const diff = (b[metricKey] ?? 0) - (a[metricKey] ?? 0);
     return sortDir === 'desc' ? diff : -diff;
   });
@@ -120,6 +160,8 @@ export default function ManagementView() {
     if (activeTab === 'Voice Hours') return `${row.voice ?? 0}h`;
     return (row[metricKey] ?? 0).toLocaleString();
   }
+
+  const isMetricTab = METRIC_KEY[activeTab] !== undefined;
 
   return (
     <section className="section">
@@ -130,21 +172,33 @@ export default function ManagementView() {
           <button
             key={tab}
             className={`tab-btn${activeTab === tab ? ' active' : ''}`}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => { setActiveTab(tab); setSortDir('desc'); }}
           >
             {tab}
           </button>
         ))}
       </div>
 
-      {activeTab === 'Mod Notes' ? (
+      {activeTab === 'Moderators' && (
+        <ModeratorsTab
+          modIds={activeModIds}
+          profiles={profiles}
+          setProfiles={setProfiles}
+          removedIds={removedIds}
+          onRemoveMod={handleRemoveMod}
+        />
+      )}
+
+      {activeTab === 'Mod Notes' && (
         <ModNotesTab
           isDirector={isDirector}
-          modIds={data.map(d => d.member_id)}
+          modIds={activeModIds}
           profiles={profiles}
           setProfiles={setProfiles}
         />
-      ) : (
+      )}
+
+      {isMetricTab && (
         <>
           <div className="date-range-btns">
             {presets.map(({ key, label }) => (
