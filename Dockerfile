@@ -10,10 +10,10 @@ RUN npm run build
 FROM golang:1.22-alpine AS backend
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN go mod download
-COPY API/     ./API/
 COPY core/    ./core/
 COPY modules/ ./modules/
+RUN go mod download
+COPY API/     ./API/
 RUN CGO_ENABLED=0 GOOS=linux go build -o tracker ./API/...
 
 # Stage 3 — minimal final image
