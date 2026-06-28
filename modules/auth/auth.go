@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
@@ -19,13 +21,25 @@ import (
 
 var discordClient = &http.Client{Timeout: 10 * time.Second}
 
+type discordProfile struct {
+	Username  string
+	AvatarURL string
+}
+
+type profileCacheEntry struct {
+	profile   discordProfile
+	expiresAt time.Time
+}
+
 type Module struct {
-	db  *gorm.DB
-	cfg *config.Config
+	db           *gorm.DB
+	cfg          *config.Config
+	profileMu    sync.RWMutex
+	profileCache map[string]profileCacheEntry
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Module {
-	return &Module{db: db, cfg: cfg}
+	return &Module{db: db, cfg: cfg, profileCache: make(map[string]profileCacheEntry)}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -33,6 +47,87 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/auth/discord/callback", m.handleCallback)
 	mux.HandleFunc("/auth/discord/logout", m.handleLogout)
 	mux.HandleFunc("/api/me", m.handleMe)
+	mux.HandleFunc("/api/profiles", m.handleProfiles)
+}
+
+func (m *Module) handleProfiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	idsParam := r.URL.Query().Get("ids")
+	type profileResult struct {
+		ID        string `json:"id"`
+		Username  string `json:"username"`
+		AvatarURL string `json:"avatar_url"`
+	}
+	if idsParam == "" {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]profileResult{})
+		return
+	}
+	rawIDs := strings.Split(idsParam, ",")
+	results := make([]profileResult, 0, len(rawIDs))
+	for _, id := range rawIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		p := m.fetchDiscordProfile(r.Context(), id)
+		results = append(results, profileResult{ID: id, Username: p.Username, AvatarURL: p.AvatarURL})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(results)
+}
+
+func (m *Module) fetchDiscordProfile(ctx context.Context, userID string) discordProfile {
+	m.profileMu.RLock()
+	if e, ok := m.profileCache[userID]; ok && time.Now().Before(e.expiresAt) {
+		p := e.profile
+		m.profileMu.RUnlock()
+		return p
+	}
+	m.profileMu.RUnlock()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://discord.com/api/users/"+userID, nil)
+	if err != nil {
+		return discordProfile{}
+	}
+	req.Header.Set("Authorization", "Bot "+m.cfg.DiscordToken)
+	resp, err := discordClient.Do(req)
+	if err != nil {
+		return discordProfile{}
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Username   string  `json:"username"`
+		GlobalName *string `json:"global_name"`
+		Avatar     string  `json:"avatar"`
+	}
+	if resp.StatusCode == http.StatusOK {
+		_ = json.NewDecoder(resp.Body).Decode(&data)
+	} else {
+		_, _ = io.Copy(io.Discard, resp.Body)
+	}
+
+	name := data.Username
+	if data.GlobalName != nil && *data.GlobalName != "" {
+		name = *data.GlobalName
+	}
+
+	avatarURL := ""
+	if data.Avatar != "" {
+		avatarURL = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png?size=64", userID, data.Avatar)
+	}
+
+	profile := discordProfile{Username: name, AvatarURL: avatarURL}
+
+	m.profileMu.Lock()
+	m.profileCache[userID] = profileCacheEntry{profile: profile, expiresAt: time.Now().Add(10 * time.Minute)}
+	m.profileMu.Unlock()
+
+	return profile
 }
 
 func (m *Module) handleMe(w http.ResponseWriter, r *http.Request) {
@@ -55,10 +150,15 @@ func (m *Module) handleMe(w http.ResponseWriter, r *http.Request) {
 	default:
 		roleStr = "mod"
 	}
+
+	profile := m.fetchDiscordProfile(r.Context(), userID)
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"discord_user_id": userID,
 		"role":            roleStr,
+		"username":        profile.Username,
+		"avatar_url":      profile.AvatarURL,
 	})
 }
 

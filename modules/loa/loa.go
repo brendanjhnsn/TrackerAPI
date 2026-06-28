@@ -2,11 +2,15 @@ package loa
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
+	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
 	"gorm.io/gorm"
 )
 
@@ -37,6 +41,8 @@ func (m *Module) handleLOA(w http.ResponseWriter, r *http.Request) {
 		m.getLOAs(w, r)
 	case http.MethodPost:
 		m.createLOA(w, r)
+	case http.MethodDelete:
+		m.deleteLOA(w, r)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -46,6 +52,18 @@ func (m *Module) getLOAs(w http.ResponseWriter, r *http.Request) {
 	var loas []database.LOA
 	if r.URL.Query().Get("all") == "true" {
 		if err := m.db.Find(&loas).Error; err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
+			return
+		}
+	} else if r.URL.Query().Get("mine") == "true" {
+		userID, ok := auth.UserIDFromContext(r.Context())
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+			return
+		}
+		if err := m.db.Where("member_id = ?", userID).Order("start_date desc").Find(&loas).Error; err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
 			return
@@ -110,10 +128,53 @@ func (m *Module) createLOA(w http.ResponseWriter, r *http.Request) {
 		EndDate:   &endDate,
 	}
 	if err := m.db.Create(&loa).Error; err != nil {
+		log.Printf("[ERROR] Failed to create LOA for member %s: %v", req.MemberID, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to create LOA"})
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(loa)
+}
+
+func (m *Module) deleteLOA(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "id is required"})
+		return
+	}
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid id"})
+		return
+	}
+
+	var loa database.LOA
+	if err := m.db.First(&loa, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "loa not found"})
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
+		}
+		return
+	}
+
+	userID, _ := auth.UserIDFromContext(r.Context())
+	role, _ := auth.RoleFromContext(r.Context())
+	if loa.MemberID != userID && role != auth.RoleManager && role != auth.RoleDirector {
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
+		return
+	}
+
+	if err := m.db.Delete(&loa).Error; err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "failed to delete LOA"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

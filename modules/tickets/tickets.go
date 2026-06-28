@@ -126,8 +126,8 @@ func (m *Module) handleTickets(w http.ResponseWriter, r *http.Request) {
 
 	var rows []DailyTicketRow
 	if err := query.Select("to_char(first_resp_date, 'YYYY-MM-DD') as date, first_resp_id as member_id, count(*) as tickets").
-		Group("first_resp_date::date, first_resp_id").
-		Order("first_resp_date DESC").
+		Group("to_char(first_resp_date, 'YYYY-MM-DD'), first_resp_id").
+		Order("to_char(first_resp_date, 'YYYY-MM-DD') DESC").
 		Scan(&rows).Error; err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})

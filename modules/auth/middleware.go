@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
@@ -104,7 +106,8 @@ func (d *discordRoleFetcher) GetMemberRoles(ctx context.Context, userID string) 
 		return nil, ErrUserNotInGuild
 	}
 	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, resp.Body)
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("Discord API error for user %s: status %d, body: %s", userID, resp.StatusCode, string(body))
 		return nil, fmt.Errorf("discord API error: %d", resp.StatusCode)
 	}
 	var member guildMember
@@ -114,20 +117,59 @@ func (d *discordRoleFetcher) GetMemberRoles(ctx context.Context, userID string) 
 	return member.Roles, nil
 }
 
+type roleCacheEntry struct {
+	roles     []string
+	expiresAt time.Time
+}
+
+type cachedRoleFetcher struct {
+	inner RoleFetcher
+	ttl   time.Duration
+	mu    sync.RWMutex
+	cache map[string]roleCacheEntry
+}
+
+func newCachedRoleFetcher(inner RoleFetcher, ttl time.Duration) RoleFetcher {
+	return &cachedRoleFetcher{inner: inner, ttl: ttl, cache: make(map[string]roleCacheEntry)}
+}
+
+func (c *cachedRoleFetcher) GetMemberRoles(ctx context.Context, userID string) ([]string, error) {
+	c.mu.RLock()
+	if e, ok := c.cache[userID]; ok && time.Now().Before(e.expiresAt) {
+		roles := e.roles
+		c.mu.RUnlock()
+		return roles, nil
+	}
+	c.mu.RUnlock()
+
+	roles, err := c.inner.GetMemberRoles(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	c.mu.Lock()
+	c.cache[userID] = roleCacheEntry{roles: roles, expiresAt: time.Now().Add(c.ttl)}
+	c.mu.Unlock()
+
+	return roles, nil
+}
+
 // Middleware returns an http.Handler that enforces auth on all /api/* routes except /api/loa.
 func (m *Module) Middleware(next http.Handler) http.Handler {
 	return m.middleware(
 		next,
 		&gormSessionStore{m.db},
-		newDiscordRoleFetcher(m.cfg.DiscordToken, m.cfg.DiscordGuildID),
+		newCachedRoleFetcher(newDiscordRoleFetcher(m.cfg.DiscordToken, m.cfg.DiscordGuildID), 5*time.Minute),
 	)
 }
 
 func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleFetcher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
-		isPublicLOA := path == "/api/loa" && r.Method == http.MethodGet && r.URL.Query().Get("all") == ""
-		if !strings.HasPrefix(path, "/api/") || isPublicLOA {
+		isPublicLOA := path == "/api/loa" && r.Method == http.MethodGet && r.URL.Query().Get("all") == "" && r.URL.Query().Get("mine") == ""
+		isPublicStat := r.Method == http.MethodGet &&
+			(path == "/api/messages" || path == "/api/tickets" || path == "/api/qfs" || path == "/api/voice")
+		if !strings.HasPrefix(path, "/api/") || isPublicLOA || isPublicStat {
 			next.ServeHTTP(w, r)
 			return
 		}

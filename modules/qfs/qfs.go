@@ -29,7 +29,7 @@ func (m *Module) Register(s *discordgo.Session) {
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/checks", m.handleChecks)
+	mux.HandleFunc("/api/qfs", m.handleChecks)
 }
 
 func (m *Module) onMessageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
@@ -81,7 +81,8 @@ func (m *Module) onReactionAdd(s *discordgo.Session, r *discordgo.MessageReactio
 		return
 	}
 	em := r.Emoji.Name
-	if em != "✅" && em != "☑️" {
+	isCheckmark := em == "✅" || em == "✔️" || em == "✔" || em == "☑️" || em == "☑"
+	if !isCheckmark {
 		log.Printf("[CHECKMARK] Ignored because emoji is not a checkmark: %s", em)
 		return
 	}
@@ -101,15 +102,15 @@ func (m *Module) onReactionAdd(s *discordgo.Session, r *discordgo.MessageReactio
 			log.Printf("[CHECKMARK] Resolved mod role name %s to ID %s", m.cfg.ModRoleName, modRoleID)
 		}
 	}
-	isMod := false
+	isStaff := false
 	for _, rid := range member.Roles {
-		if rid == modRoleID {
-			isMod = true
+		if rid == modRoleID || rid == m.cfg.ManagerRoleID || rid == m.cfg.DirectorRoleID {
+			isStaff = true
 			break
 		}
 	}
-	if !isMod {
-		log.Printf("[CHECKMARK] Reactor is not mod (role %s missing): roles=%v", modRoleID, member.Roles)
+	if !isStaff {
+		log.Printf("[CHECKMARK] Reactor is not staff (mod/manager/director): roles=%v", member.Roles)
 		return
 	}
 
@@ -208,8 +209,8 @@ func (m *Module) handleChecks(w http.ResponseWriter, r *http.Request) {
 
 	var rows []DailyCheckRow
 	if err := query.Select("to_char(date, 'YYYY-MM-DD') as date, member_id, count(*) as count").
-		Group("date::date, member_id").
-		Order("date DESC").
+		Group("to_char(date, 'YYYY-MM-DD'), member_id").
+		Order("to_char(date, 'YYYY-MM-DD') DESC").
 		Scan(&rows).Error; err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})

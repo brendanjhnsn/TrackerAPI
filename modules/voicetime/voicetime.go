@@ -28,7 +28,7 @@ func (m *Module) Register(s *discordgo.Session) {
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/voicetime", m.handleVoiceTime)
+	mux.HandleFunc("/api/voice", m.handleVoiceTime)
 }
 
 func (m *Module) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
@@ -126,8 +126,8 @@ func (m *Module) handleVoiceTime(w http.ResponseWriter, r *http.Request) {
 		COALESCE(SUM(duration), 0) as total_seconds,
 		COALESCE(SUM(duration), 0) / 3600 as hours,
 		(COALESCE(SUM(duration), 0) % 3600) / 60 as minutes`).
-		Group("date::date, member_id").
-		Order("date DESC").
+		Group("to_char(date, 'YYYY-MM-DD'), member_id").
+		Order("to_char(date, 'YYYY-MM-DD') DESC").
 		Scan(&rows).Error; err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
