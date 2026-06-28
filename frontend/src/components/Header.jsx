@@ -2,12 +2,30 @@ import { useAuth } from '../context/AuthContext';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
-export default function Header() {
+export default function Header({ currentPage, setCurrentPage }) {
   const { user, logout } = useAuth();
+  const isManagement = user?.role === 'manager' || user?.role === 'director';
 
   return (
     <header className="header">
-      <span className="header-title">Community Tracker</span>
+      <div className="header-left">
+        <span
+          className={`header-title${isManagement ? ' clickable' : ''}`}
+          onClick={() => isManagement && setCurrentPage('home')}
+        >
+          Community Tracker
+        </span>
+        {isManagement && (
+          <nav className="header-nav">
+            <button
+              className={`header-nav-btn${currentPage === 'moderators' ? ' active' : ''}`}
+              onClick={() => setCurrentPage('moderators')}
+            >
+              Moderators
+            </button>
+          </nav>
+        )}
+      </div>
       <div className="header-right">
         {user === undefined && (
           <span className="loading-text">Loading...</span>

@@ -41,11 +41,59 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 0;
+}
+
 .header-title {
   font-size: 16px;
   font-weight: 700;
   color: var(--discord-text);
   letter-spacing: 0.5px;
+  cursor: default;
+}
+
+.header-title.clickable {
+  cursor: pointer;
+}
+
+.header-title.clickable:hover {
+  color: #fff;
+}
+
+/* ---- Header Nav ---- */
+.header-nav {
+  display: flex;
+  align-self: stretch;
+  margin-left: 20px;
+}
+
+.header-nav-btn {
+  padding: 0 16px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-top: 3px solid transparent;
+  background: transparent;
+  color: var(--discord-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-bottom-color 0.15s;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.header-nav-btn:hover {
+  color: var(--discord-text);
+}
+
+.header-nav-btn.active {
+  color: var(--discord-text);
+  border-bottom-color: var(--discord-blurple);
 }
 
 .header-right {
