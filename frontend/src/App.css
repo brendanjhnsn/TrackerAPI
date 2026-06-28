@@ -1,0 +1,343 @@
+:root {
+  --discord-bg:      #36393f;
+  --discord-dark:    #2c2f33;
+  --discord-darker:  #23272a;
+  --discord-blurple: #7289da;
+  --discord-green:   #43b581;
+  --discord-yellow:  #faa61a;
+  --discord-red:     #f04747;
+  --discord-text:    #dcddde;
+  --discord-muted:   #72767d;
+  --discord-card:    #2f3136;
+}
+
+/* ---- Layout ---- */
+.app {
+  min-height: 100vh;
+  background-color: var(--discord-bg);
+  color: var(--discord-text);
+}
+
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* ---- Header ---- */
+.header {
+  background-color: var(--discord-darker);
+  padding: 0 24px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--discord-text);
+  letter-spacing: 0.5px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-chip {
+  background-color: var(--discord-dark);
+  color: var(--discord-text);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+/* ---- Buttons ---- */
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+}
+
+.btn-blurple {
+  background-color: var(--discord-blurple);
+  color: #fff;
+}
+
+.btn-red {
+  background-color: var(--discord-red);
+  color: #fff;
+}
+
+.btn-muted {
+  background-color: var(--discord-dark);
+  color: var(--discord-text);
+}
+
+/* ---- Sections ---- */
+.section {
+  background-color: var(--discord-dark);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--discord-muted);
+  margin: 0 0 16px;
+}
+
+/* ---- Stat Cards ---- */
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .stat-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stat-card {
+  background-color: var(--discord-card);
+  border-radius: 6px;
+  padding: 16px;
+  text-align: center;
+}
+
+.stat-card-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.stat-card-label {
+  font-size: 12px;
+  color: var(--discord-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ---- Date Range Buttons ---- */
+.date-range-btns {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.date-range-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--discord-muted);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--discord-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.date-range-btn.active {
+  background-color: var(--discord-blurple);
+  border-color: var(--discord-blurple);
+  color: #fff;
+}
+
+/* ---- Chart Container ---- */
+.chart-container {
+  background-color: var(--discord-card);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+/* ---- Form ---- */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--discord-muted);
+}
+
+.form-input,
+.form-textarea {
+  background-color: var(--discord-darker);
+  border: 1px solid var(--discord-card);
+  border-radius: 4px;
+  color: var(--discord-text);
+  padding: 10px 12px;
+  font-size: 16px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  border-color: var(--discord-blurple);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ---- Banners ---- */
+.banner {
+  padding: 12px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.banner-success {
+  background-color: rgba(67, 181, 129, 0.15);
+  border: 1px solid var(--discord-green);
+  color: var(--discord-green);
+}
+
+.banner-error {
+  background-color: rgba(240, 71, 71, 0.15);
+  border: 1px solid var(--discord-red);
+  color: var(--discord-red);
+}
+
+/* ---- LOA Table ---- */
+.loa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.loa-table th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--discord-muted);
+  border-bottom: 1px solid var(--discord-card);
+}
+
+.loa-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(47, 49, 54, 0.6);
+}
+
+.loa-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---- Status Badges ---- */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-active {
+  background-color: rgba(67, 181, 129, 0.2);
+  color: var(--discord-green);
+}
+
+.badge-upcoming {
+  background-color: rgba(250, 166, 26, 0.2);
+  color: var(--discord-yellow);
+}
+
+.badge-past {
+  background-color: rgba(114, 118, 125, 0.2);
+  color: var(--discord-muted);
+}
+
+/* ---- Dropdown ---- */
+.form-select {
+  background-color: var(--discord-darker);
+  border: 1px solid var(--discord-card);
+  border-radius: 4px;
+  color: var(--discord-text);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  max-width: 300px;
+}
+
+.form-select:focus {
+  border-color: var(--discord-blurple);
+}
+
+/* ---- Loading ---- */
+.loading-text {
+  color: var(--discord-muted);
+  font-size: 14px;
+}
+
+.section-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--discord-muted);
+  margin: 24px 0 12px;
+}
+
+.muted {
+  color: var(--discord-muted);
+  font-size: 14px;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
