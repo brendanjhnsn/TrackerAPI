@@ -33,7 +33,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		Environment:      getEnv("ENVIRONMENT", "development"),
-		ServerPort:       getEnv("SERVER_PORT", "8080"),
+		ServerPort:       getEnv("PORT", getEnv("SERVER_PORT", "8080")),
 		DiscordToken:     getEnv("DISCORD_TOKEN", ""),
 		DBDriver:         getEnv("DB_DRIVER", "postgres"),
 		DBHost:           getEnv("DB_HOST", "127.0.0.1"),

@@ -54,11 +54,11 @@ func main() {
 	authMod    := auth.New(db, cfg)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
+	// SPA static file server — serves the built React app from ./dist.
+	// Falls back to index.html for any path that doesn't match a real file,
+	// enabling client-side routing. Must be registered before API routes so
+	// the more-specific API patterns take priority in Go's mux.
+	mux.Handle("/", http.FileServer(spaFS{http.Dir("./dist")}))
 	loaMod.RegisterRoutes(mux)
 	ticketsMod.RegisterRoutes(mux)
 	voiceMod.RegisterRoutes(mux)

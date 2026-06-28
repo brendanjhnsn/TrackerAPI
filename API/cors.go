@@ -1,6 +1,33 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+	"os"
+)
+
+// spaFS wraps an http.FileSystem so that requests for missing files fall back
+// to index.html, which is required for client-side routing in a React SPA.
+type spaFS struct{ http.FileSystem }
+
+func (s spaFS) Open(name string) (http.File, error) {
+	f, err := s.FileSystem.Open(name)
+	if os.IsNotExist(err) {
+		return s.FileSystem.Open("/index.html")
+	}
+	if err != nil {
+		return nil, err
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	if stat.IsDir() {
+		_ = f.Close()
+		return s.FileSystem.Open("/index.html")
+	}
+	return f, nil
+}
 
 func corsMiddleware(frontendURL, environment string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
