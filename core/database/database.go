@@ -40,7 +40,7 @@ func connectPostgres(cfg *config.Config) (*gorm.DB, *sql.DB, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
-	if err := db.AutoMigrate(&Question{}, &QuestionCheck{}, &Ticket{}, &DailyMessage{}, &VoiceTime{}, &LOA{}, &Session{}); err != nil {
+	if err := db.AutoMigrate(&Question{}, &QuestionCheck{}, &Ticket{}, &DailyMessage{}, &VoiceTime{}, &LOA{}, &Session{}, &ModNote{}, &ModTraining{}); err != nil {
 		return nil, nil, fmt.Errorf("failed to migrate postgres schema: %w", err)
 	}
 	sqlDB, err := db.DB()
@@ -86,7 +86,7 @@ func connectMySQL(cfg *config.Config) (*gorm.DB, *sql.DB, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to connect to mysql: %w", err)
 	}
-	if err := db.AutoMigrate(&Question{}, &QuestionCheck{}, &Ticket{}, &DailyMessage{}, &VoiceTime{}, &LOA{}, &Session{}); err != nil {
+	if err := db.AutoMigrate(&Question{}, &QuestionCheck{}, &Ticket{}, &DailyMessage{}, &VoiceTime{}, &LOA{}, &Session{}, &ModNote{}, &ModTraining{}); err != nil {
 		return nil, nil, fmt.Errorf("failed to migrate mysql schema: %w", err)
 	}
 	sqlDB, err := db.DB()

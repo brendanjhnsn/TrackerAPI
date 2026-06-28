@@ -74,3 +74,20 @@ type Session struct {
 	ExpiresAt     time.Time `gorm:"not null;index"`
 	CreatedAt     time.Time
 }
+
+type ModNote struct {
+	ID             uint      `gorm:"primaryKey"`
+	ModMemberID    string    `gorm:"index;not null"`
+	AuthorMemberID string    `gorm:"not null"`
+	Content        string    `gorm:"type:text;not null"`
+	CreatedAt      time.Time
+}
+
+type ModTraining struct {
+	ID            uint       `gorm:"primaryKey"`
+	ModMemberID   string     `gorm:"uniqueIndex;not null"`
+	InTraining    bool       `gorm:"default:false"`
+	TrainingStart *time.Time
+	TrainingEnd   *time.Time
+	UpdatedAt     time.Time
+}

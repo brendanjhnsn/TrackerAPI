@@ -12,6 +12,7 @@ import (
 	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
 	"github.com/brendanjhnsn/TrackerAPI/modules/dailymessages"
 	"github.com/brendanjhnsn/TrackerAPI/modules/loa"
+	"github.com/brendanjhnsn/TrackerAPI/modules/modnotes"
 	"github.com/brendanjhnsn/TrackerAPI/modules/qfs"
 	"github.com/brendanjhnsn/TrackerAPI/modules/tickets"
 	"github.com/brendanjhnsn/TrackerAPI/modules/voicetime"
@@ -46,12 +47,13 @@ func main() {
 	}
 	defer database.Close(sqlDB)
 
-	loaMod     := loa.New(db, cfg)
-	ticketsMod := tickets.New(db, cfg)
-	voiceMod   := voicetime.New(db, cfg)
-	qfsMod     := qfs.New(db, cfg)
-	dailyMod   := dailymessages.New(db, cfg)
-	authMod    := auth.New(db, cfg)
+	loaMod       := loa.New(db, cfg)
+	ticketsMod   := tickets.New(db, cfg)
+	voiceMod     := voicetime.New(db, cfg)
+	qfsMod       := qfs.New(db, cfg)
+	dailyMod     := dailymessages.New(db, cfg)
+	authMod      := auth.New(db, cfg)
+	modNotesMod  := modnotes.New(db, cfg)
 
 	mux := http.NewServeMux()
 	// SPA static file server — serves the built React app from ./dist.
@@ -65,6 +67,7 @@ func main() {
 	qfsMod.RegisterRoutes(mux)
 	dailyMod.RegisterRoutes(mux)
 	authMod.RegisterRoutes(mux)
+	modNotesMod.RegisterRoutes(mux)
 
 	go func() {
 		log.Printf("Starting API server on port %s", cfg.ServerPort)
