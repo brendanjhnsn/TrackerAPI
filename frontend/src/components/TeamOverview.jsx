@@ -53,18 +53,18 @@ function buildChartData(messages, tickets, qa, voice) {
 export default function TeamOverview() {
   const { user } = useAuth();
   const isLoggedIn = user !== null && user !== undefined;
-  const isManagement = user?.role === 'manager' || user?.role === 'director';
 
   const [range, setRange] = useState('30d');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [viewMode, setViewMode] = useState('team');
 
   const [chartData, setChartData] = useState([]);
   const [totals, setTotals] = useState({ messages: 0, tickets: 0, qa: 0, voice: 0 });
   const [loading, setLoading] = useState(true);
 
-  const [profiles, setProfiles] = useState({});
-  const [selectedModID, setSelectedModID] = useState('');
+  const [myStats, setMyStats] = useState({ messages: 0, tickets: 0, qa: 0, voice: 0 });
+  const [myLoading, setMyLoading] = useState(false);
 
   useEffect(() => {
     if (range === 'custom' && (!customStart || !customEnd)) return;
@@ -96,26 +96,34 @@ export default function TeamOverview() {
   }, [range, customStart, customEnd]);
 
   useEffect(() => {
-    if (!isManagement || chartData.length === 0) return;
-    const ids = chartData.map(d => d.member_id).filter(Boolean);
-    fetch(`${BASE}/api/profiles?ids=${ids.join(',')}`, { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
-      .then(list => {
-        const map = {};
-        for (const p of list) map[p.id] = p;
-        setProfiles(map);
+    if (!isLoggedIn || viewMode !== 'mine' || !user) return;
+    if (range === 'custom' && (!customStart || !customEnd)) return;
+    const memberID = user.discord_user_id;
+    const params = getQueryParams(range, customStart, customEnd);
+    const myQ = buildQuery({ ...params, member_id: memberID });
+    setMyLoading(true);
+    Promise.all([
+      fetch(`${BASE}/api/messages${myQ}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+      fetch(`${BASE}/api/tickets${myQ}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+      fetch(`${BASE}/api/qfs${myQ}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+      fetch(`${BASE}/api/voice${myQ}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []),
+    ])
+      .then(([messages, tickets, qa, voice]) => {
+        setMyStats({
+          messages: Array.isArray(messages) ? messages.reduce((s, r) => s + (r.count ?? 0), 0) : 0,
+          tickets:  Array.isArray(tickets)  ? tickets.reduce((s, r) => s + (r.tickets ?? 0), 0) : 0,
+          qa:       Array.isArray(qa)       ? qa.reduce((s, r) => s + (r.count ?? 0), 0) : 0,
+          voice:    Array.isArray(voice)    ? Math.round(voice.reduce((s, r) => s + (r.total_seconds ?? 0), 0) / 3600) : 0,
+        });
       })
-      .catch(() => {});
-  }, [chartData, isManagement]);
+      .catch(() => {})
+      .finally(() => setMyLoading(false));
+  }, [isLoggedIn, viewMode, user, range, customStart, customEnd]);
 
-  function displayName(id) {
-    return profiles[id]?.username || id;
-  }
-
-  const selectedModData = selectedModID ? chartData.find(d => d.member_id === selectedModID) : null;
-  const displayStats = selectedModData ?? totals;
-  const chartDisplayData = selectedModData
-    ? [selectedModData]
+  const displayStats = viewMode === 'mine' ? myStats : totals;
+  const isLoadingDisplay = viewMode === 'mine' ? myLoading : loading;
+  const chartDisplayData = viewMode === 'mine' && user
+    ? [{ member_id: user.discord_user_id, ...myStats }]
     : [{ member_id: '__team__', ...totals }];
 
   const presets = [
@@ -129,12 +137,29 @@ export default function TeamOverview() {
     <section className="section">
       <h2 className="section-title">Team Overview</h2>
 
+      {isLoggedIn && (
+        <div className="view-toggle">
+          <button
+            className={`view-toggle-btn${viewMode === 'team' ? ' active' : ''}`}
+            onClick={() => setViewMode('team')}
+          >
+            Team Stats
+          </button>
+          <button
+            className={`view-toggle-btn${viewMode === 'mine' ? ' active' : ''}`}
+            onClick={() => setViewMode('mine')}
+          >
+            My Stats
+          </button>
+        </div>
+      )}
+
       <div className="date-range-btns">
         {presets.map(({ key, label }) => (
           <button
             key={key}
             className={`date-range-btn${range === key ? ' active' : ''}`}
-            onClick={() => { setRange(key); setSelectedModID(''); }}
+            onClick={() => setRange(key)}
           >
             {label}
           </button>
@@ -173,94 +198,59 @@ export default function TeamOverview() {
         </div>
       )}
 
-      {isManagement && !loading && chartData.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <select
-            className="form-select"
-            value={selectedModID}
-            onChange={e => setSelectedModID(e.target.value)}
-          >
-            <option value="">— All Mods (Team Total) —</option>
-            {chartData.map(d => (
-              <option key={d.member_id} value={d.member_id}>
-                {displayName(d.member_id)}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {selectedModData && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          {profiles[selectedModID]?.avatar_url && (
-            <img
-              src={profiles[selectedModID].avatar_url}
-              alt=""
-              className="user-avatar"
-              style={{ width: 28, height: 28 }}
-            />
-          )}
-          <span style={{ fontSize: 13, color: 'var(--discord-muted)' }}>
-            Viewing: {displayName(selectedModID)}
-          </span>
-        </div>
-      )}
-
       <div className="stat-cards">
         <div className="stat-card">
           <div className="stat-card-value" style={{ color: '#7289da' }}>
-            {loading ? '—' : displayStats.messages.toLocaleString()}
+            {isLoadingDisplay ? '—' : displayStats.messages.toLocaleString()}
           </div>
           <div className="stat-card-label">Messages</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value" style={{ color: '#43b581' }}>
-            {loading ? '—' : displayStats.tickets.toLocaleString()}
+            {isLoadingDisplay ? '—' : displayStats.tickets.toLocaleString()}
           </div>
           <div className="stat-card-label">Tickets</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value" style={{ color: '#faa61a' }}>
-            {loading ? '—' : displayStats.qa.toLocaleString()}
+            {isLoadingDisplay ? '—' : displayStats.qa.toLocaleString()}
           </div>
           <div className="stat-card-label">Q&amp;A</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-value" style={{ color: '#f04747' }}>
-            {loading ? '—' : `${displayStats.voice}h`}
+            {isLoadingDisplay ? '—' : `${displayStats.voice}h`}
           </div>
           <div className="stat-card-label">Voice Hours</div>
         </div>
       </div>
 
-      {isLoggedIn && (
-        <div className="chart-container">
-          {loading ? (
-            <p className="loading-text">Loading chart...</p>
-          ) : range === 'custom' && (!customStart || !customEnd) ? (
-            <p className="loading-text">Select a date range above to view the chart.</p>
-          ) : chartDisplayData.length === 0 ? (
-            <p className="loading-text">No data for this period.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartDisplayData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2f3136" />
-                <XAxis dataKey="member_id" tick={false} axisLine={false} />
-                <YAxis tick={{ fill: '#72767d', fontSize: 11 }} />
-                <Tooltip
-                  contentStyle={{ background: '#2c2f33', border: '1px solid #2f3136', color: '#dcddde' }}
-                  labelFormatter={id => id === '__team__' ? 'Team Total' : displayName(id)}
-                />
-                <Legend wrapperStyle={{ color: '#dcddde', paddingTop: 8 }} />
-                <Bar dataKey="messages" name="Messages" fill="#7289da" />
-                <Bar dataKey="tickets" name="Tickets" fill="#43b581" />
-                <Bar dataKey="qa" name="Q&A" fill="#faa61a" />
-                <Bar dataKey="voice" name="Voice (h)" fill="#f04747" />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      )}
+      <div className="chart-container">
+        {loading ? (
+          <p className="loading-text">Loading chart...</p>
+        ) : range === 'custom' && (!customStart || !customEnd) ? (
+          <p className="loading-text">Select a date range above to view the chart.</p>
+        ) : chartDisplayData.length === 0 || (chartDisplayData[0].messages === 0 && chartDisplayData[0].tickets === 0 && chartDisplayData[0].qa === 0 && chartDisplayData[0].voice === 0) ? (
+          <p className="loading-text">No data for this period.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={chartDisplayData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2f3136" />
+              <XAxis dataKey="member_id" tick={false} axisLine={false} />
+              <YAxis tick={{ fill: '#72767d', fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{ background: '#2c2f33', border: '1px solid #2f3136', color: '#dcddde' }}
+                labelFormatter={() => viewMode === 'mine' ? (user?.username || 'My Stats') : 'Team Total'}
+              />
+              <Legend wrapperStyle={{ color: '#dcddde', paddingTop: 8 }} />
+              <Bar dataKey="messages" name="Messages" fill="#7289da" />
+              <Bar dataKey="tickets" name="Tickets" fill="#43b581" />
+              <Bar dataKey="qa" name="Q&A" fill="#faa61a" />
+              <Bar dataKey="voice" name="Voice (h)" fill="#f04747" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
     </section>
   );
 }

@@ -341,3 +341,61 @@
   padding: 4px 10px;
   font-size: 12px;
 }
+
+/* ---- Tabs ---- */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+  border-bottom: 2px solid var(--discord-card);
+}
+
+.tab-btn {
+  padding: 10px 18px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  background: transparent;
+  color: var(--discord-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--discord-text);
+}
+
+.tab-btn.active {
+  color: var(--discord-blurple);
+  border-bottom-color: var(--discord-blurple);
+}
+
+/* ---- View toggle (My Stats / Team Stats) ---- */
+.view-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  background-color: var(--discord-card);
+  border-radius: 4px;
+  padding: 3px;
+  width: fit-content;
+}
+
+.view-toggle-btn {
+  padding: 6px 16px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--discord-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.view-toggle-btn.active {
+  background-color: var(--discord-blurple);
+  color: #fff;
+}
