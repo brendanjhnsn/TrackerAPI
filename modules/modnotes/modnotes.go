@@ -20,7 +20,8 @@ import (
 // Official YAGPDB application ID. Change this if using a self-hosted YAGPDB instance.
 const yagpdbAppID = "204255221017214977"
 
-var snowflakeRe = regexp.MustCompile(`\d{17,19}`)
+var snowflakeRe    = regexp.MustCompile(`\d{17,19}`)
+var targetInDescRe = regexp.MustCompile(`\*\(ID (\d{17,19})\)\*`)
 
 type Module struct {
 	db  *gorm.DB
@@ -66,36 +67,26 @@ func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCre
 
 	embed := msg.Embeds[0]
 
-	// YAGPDB places the action type in different fields depending on configuration.
-	// Check title → author name → description in order.
+	// YAGPDB (default config) puts everything in the description:
+	//   "**⚠Warned** username *(ID TARGET_ID)*\n📄**Reason:** ..."
+	// and the moderator in the embed author:
+	//   "moderatorname (ID MOD_ID)"
+	// Some self-hosted configs use embed fields instead — we try fields first, then fall back.
+
+	// Action type: try title → description (author name is the mod, not the action)
 	titleToCheck := embed.Title
-	if titleToCheck == "" && embed.Author != nil {
-		titleToCheck = embed.Author.Name
-	}
 	if titleToCheck == "" {
 		titleToCheck = embed.Description
 	}
-
 	actionType := parseModActionType(titleToCheck)
 	if actionType == "" {
-		// Log full embed structure so we can find where the action type lives.
-		var authorName, footerText string
-		if embed.Author != nil {
-			authorName = embed.Author.Name
-		}
-		if embed.Footer != nil {
-			footerText = embed.Footer.Text
-		}
-		var fieldNames []string
-		for _, f := range embed.Fields {
-			fieldNames = append(fieldNames, f.Name+"="+f.Value)
-		}
-		log.Printf("[MODLOG] Could not detect action type. title=%q author=%q desc=%q footer=%q fields=%v",
-			embed.Title, authorName, embed.Description, footerText, fieldNames)
+		log.Printf("[MODLOG] Could not detect action type. title=%q desc=%q", embed.Title, embed.Description)
 		return
 	}
 
 	var targetID, moderatorID, reason string
+
+	// Try embed fields first (some YAGPDB configs use them)
 	for _, f := range embed.Fields {
 		lower := strings.ToLower(f.Name)
 		switch {
@@ -106,6 +97,19 @@ func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCre
 		case lower == "reason":
 			reason = f.Value
 		}
+	}
+
+	// Fall back to description parsing: "**Action** name *(ID SNOWFLAKE)*\n...Reason:**..."
+	if targetID == "" && embed.Description != "" {
+		targetID = extractTargetFromDesc(embed.Description)
+	}
+	if reason == "" && embed.Description != "" {
+		reason = extractReasonFromDesc(embed.Description)
+	}
+
+	// Moderator is the embed author: "username (ID SNOWFLAKE)"
+	if moderatorID == "" && embed.Author != nil {
+		moderatorID = extractSnowflake(embed.Author.Name)
 	}
 
 	log.Printf("[MODLOG] %s by=%s target=%s reason=%q", actionType, moderatorID, targetID, reason)
@@ -173,9 +177,31 @@ func parseModActionType(title string) string {
 }
 
 // extractSnowflake pulls the first Discord snowflake ID (17–19 digits) from s.
-// YAGPDB formats IDs as either "<@123...>" or "Username (123...)" depending on version.
 func extractSnowflake(s string) string {
 	return snowflakeRe.FindString(s)
+}
+
+// extractTargetFromDesc finds the target user ID from YAGPDB description format:
+// "**⚠Warned** username *(ID SNOWFLAKE)*\n📄**Reason:** ..."
+func extractTargetFromDesc(desc string) string {
+	if m := targetInDescRe.FindStringSubmatch(desc); len(m) > 1 {
+		return m[1]
+	}
+	return extractSnowflake(desc)
+}
+
+// extractReasonFromDesc pulls the reason text from YAGPDB description format.
+// Strips the trailing ([Logs](...)) link if present.
+func extractReasonFromDesc(desc string) string {
+	idx := strings.Index(desc, "Reason:**")
+	if idx == -1 {
+		return ""
+	}
+	rest := strings.TrimSpace(desc[idx+len("Reason:**"):])
+	if i := strings.LastIndex(rest, " (["); i != -1 {
+		rest = strings.TrimSpace(rest[:i])
+	}
+	return rest
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
