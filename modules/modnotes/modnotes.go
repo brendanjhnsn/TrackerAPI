@@ -65,9 +65,33 @@ func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCre
 	}
 
 	embed := msg.Embeds[0]
-	actionType := parseModActionType(embed.Title)
+
+	// YAGPDB places the action type in different fields depending on configuration.
+	// Check title → author name → description in order.
+	titleToCheck := embed.Title
+	if titleToCheck == "" && embed.Author != nil {
+		titleToCheck = embed.Author.Name
+	}
+	if titleToCheck == "" {
+		titleToCheck = embed.Description
+	}
+
+	actionType := parseModActionType(titleToCheck)
 	if actionType == "" {
-		log.Printf("[MODLOG] Unrecognised embed title %q — skipping", embed.Title)
+		// Log full embed structure so we can find where the action type lives.
+		var authorName, footerText string
+		if embed.Author != nil {
+			authorName = embed.Author.Name
+		}
+		if embed.Footer != nil {
+			footerText = embed.Footer.Text
+		}
+		var fieldNames []string
+		for _, f := range embed.Fields {
+			fieldNames = append(fieldNames, f.Name+"="+f.Value)
+		}
+		log.Printf("[MODLOG] Could not detect action type. title=%q author=%q desc=%q footer=%q fields=%v",
+			embed.Title, authorName, embed.Description, footerText, fieldNames)
 		return
 	}
 
