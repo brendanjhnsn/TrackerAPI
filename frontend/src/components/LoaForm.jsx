@@ -112,13 +112,13 @@ export default function LoaForm() {
           />
         </div>
         <div className="form-group">
-          <label className="form-label" htmlFor="loa-reason">Reason</label>
+          <label className="form-label" htmlFor="loa-reason">Notes</label>
           <textarea
             id="loa-reason"
             className="form-textarea"
             value={reason}
             onChange={e => setReason(e.target.value)}
-            placeholder="Briefly explain your LOA..."
+            placeholder="Add any notes here... (Optional)"
             rows={3}
           />
         </div>
