@@ -85,7 +85,8 @@ func main() {
 		discordgo.IntentsGuildMessageReactions |
 		discordgo.IntentsGuildVoiceStates |
 		discordgo.IntentsGuildMembers |
-		discordgo.IntentMessageContent
+		discordgo.IntentMessageContent |
+		discordgo.Intent(1 << 18) // GUILD_MODERATION — needed for AuditLogEntryCreate events
 	defer discord.Close()
 
 	ticketsMod.Register(discord)

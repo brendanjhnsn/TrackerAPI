@@ -32,9 +32,10 @@ func New(db *gorm.DB, cfg *config.Config) *Module {
 	return &Module{db: db, cfg: cfg}
 }
 
-// Register adds the YAGPDB modlog listener to the Discord session.
+// Register adds Discord event handlers to the session.
 func (m *Module) Register(s *discordgo.Session) {
 	s.AddHandler(m.onModLogMessage)
+	s.AddHandler(m.onAuditLogEntry)
 }
 
 // onModLogMessage fires on every message in the configured modlog channel.
@@ -202,6 +203,86 @@ func extractReasonFromDesc(desc string) string {
 		rest = strings.TrimSpace(rest[:i])
 	}
 	return rest
+}
+
+// onAuditLogEntry captures kicks, bans, and timeouts issued directly through
+// Discord (right-click context menu) rather than through YAGPDB commands.
+// YAGPDB-initiated actions are skipped here because the modlog channel listener
+// handles those and correctly attributes them to the human moderator.
+func (m *Module) onAuditLogEntry(s *discordgo.Session, entry *discordgo.GuildAuditLogEntryCreate) {
+	if entry.GuildID != m.cfg.DiscordGuildID {
+		return
+	}
+	// YAGPDB is the actor when it executes slash commands — let the modlog listener handle those.
+	if entry.UserID == yagpdbAppID {
+		return
+	}
+
+	var actionType string
+	switch entry.ActionType {
+	case discordgo.AuditLogActionMemberKick:
+		actionType = "kick"
+	case discordgo.AuditLogActionMemberBanAdd:
+		actionType = "ban"
+	case discordgo.AuditLogActionMemberUpdate:
+		// Timeout is a member update that sets communication_disabled_until.
+		for _, change := range entry.Changes {
+			if change.Key == "communication_disabled_until" && change.NewValue != nil {
+				actionType = "timeout"
+				break
+			}
+		}
+	}
+	if actionType == "" {
+		return
+	}
+
+	moderatorID := entry.UserID
+	targetID := entry.TargetID
+	reason := entry.Reason
+
+	log.Printf("[AUDIT] %s by=%s target=%s reason=%q", actionType, moderatorID, targetID, reason)
+
+	if moderatorID != "" {
+		issued := database.ModIssuedAction{
+			ModMemberID: moderatorID,
+			ActionType:  actionType,
+			Reason:      reason,
+			IssuedAt:    time.Now().UTC(),
+		}
+		if err := m.db.Create(&issued).Error; err != nil {
+			log.Printf("[AUDIT] Failed to save issued action: %v", err)
+		}
+	}
+
+	// Record discipline if the target holds a staff role.
+	if targetID == "" {
+		return
+	}
+	member, err := s.GuildMember(entry.GuildID, targetID)
+	if err != nil {
+		return
+	}
+	isStaff := false
+	for _, roleID := range member.Roles {
+		if roleID == m.cfg.ModRoleID || roleID == m.cfg.ManagerRoleID || roleID == m.cfg.DirectorRoleID {
+			isStaff = true
+			break
+		}
+	}
+	if !isStaff {
+		return
+	}
+	action := database.ModAction{
+		ModMemberID:    targetID,
+		AuthorMemberID: moderatorID,
+		ActionType:     actionType,
+		Reason:         reason,
+		IssuedAt:       time.Now().UTC(),
+	}
+	if err := m.db.Create(&action).Error; err != nil {
+		log.Printf("[AUDIT] Failed to save discipline record: %v", err)
+	}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
