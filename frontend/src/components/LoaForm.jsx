@@ -118,7 +118,7 @@ export default function LoaForm() {
             className="form-textarea"
             value={reason}
             onChange={e => setReason(e.target.value)}
-            placeholder="Add any notes here... (Optional)"
+            placeholder="Add any notes here. Optional..."
             rows={3}
           />
         </div>
