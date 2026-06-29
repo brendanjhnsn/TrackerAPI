@@ -102,8 +102,18 @@ type ModAction struct {
 	ID             uint      `gorm:"primaryKey"`
 	ModMemberID    string    `gorm:"index;not null"`
 	AuthorMemberID string    `gorm:"not null"`
-	ActionType     string    `gorm:"not null"` // "warning", "timeout", "ban"
+	ActionType     string    `gorm:"not null"` // "warning", "timeout", "ban", "kick"
 	Reason         string    `gorm:"type:text"`
 	IssuedAt       time.Time `gorm:"not null"`
 	CreatedAt      time.Time
+}
+
+// ModIssuedAction tracks how many warnings/timeouts/kicks/bans a mod has issued to others.
+type ModIssuedAction struct {
+	ID          uint      `gorm:"primaryKey"`
+	ModMemberID string    `gorm:"index;not null"` // the mod who issued the action
+	ActionType  string    `gorm:"not null"`       // "warning", "timeout", "ban", "kick"
+	Reason      string    `gorm:"type:text"`
+	IssuedAt    time.Time `gorm:"index;not null"`
+	CreatedAt   time.Time
 }

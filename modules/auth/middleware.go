@@ -129,8 +129,14 @@ type cachedRoleFetcher struct {
 	cache map[string]roleCacheEntry
 }
 
-func newCachedRoleFetcher(inner RoleFetcher, ttl time.Duration) RoleFetcher {
+func newCachedRoleFetcher(inner RoleFetcher, ttl time.Duration) *cachedRoleFetcher {
 	return &cachedRoleFetcher{inner: inner, ttl: ttl, cache: make(map[string]roleCacheEntry)}
+}
+
+func (c *cachedRoleFetcher) invalidate(userID string) {
+	c.mu.Lock()
+	delete(c.cache, userID)
+	c.mu.Unlock()
 }
 
 func (c *cachedRoleFetcher) GetMemberRoles(ctx context.Context, userID string) ([]string, error) {
@@ -156,11 +162,7 @@ func (c *cachedRoleFetcher) GetMemberRoles(ctx context.Context, userID string) (
 
 // Middleware returns an http.Handler that enforces auth on all /api/* routes except /api/loa.
 func (m *Module) Middleware(next http.Handler) http.Handler {
-	return m.middleware(
-		next,
-		&gormSessionStore{m.db},
-		newCachedRoleFetcher(newDiscordRoleFetcher(m.cfg.DiscordToken, m.cfg.DiscordGuildID), 5*time.Minute),
-	)
+	return m.middleware(next, &gormSessionStore{m.db}, m.roleFetcher)
 }
 
 func (m *Module) middleware(next http.Handler, store SessionStore, fetcher RoleFetcher) http.Handler {

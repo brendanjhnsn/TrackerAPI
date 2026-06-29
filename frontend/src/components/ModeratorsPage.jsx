@@ -73,6 +73,8 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
   const [customEnd, setCustomEnd]     = useState('');
   const [stats, setStats]             = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [issuedActions, setIssuedActions]       = useState({ warning: 0, timeout: 0, kick: 0, ban: 0 });
+  const [issuedLoading, setIssuedLoading]       = useState(false);
 
   const [inTraining, setInTraining]     = useState(false);
   const [trainingStart, setTrainingStart] = useState('');
@@ -95,11 +97,12 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
   const [actionDate, setActionDate]     = useState(() => new Date().toISOString().split('T')[0]);
   const [actionSaving, setActionSaving] = useState(false);
 
-  // Fetch stats when range changes
+  // Fetch stats + issued action counts when range changes
   useEffect(() => {
     if (range === 'custom' && (!customStart || !customEnd)) return;
     const params = getQueryParams(range, customStart, customEnd);
     const q = buildQ({ ...params, member_id: modID });
+
     setStatsLoading(true);
     Promise.all([
       fetch(`${BASE}/api/messages${q}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []),
@@ -117,6 +120,13 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
       })
       .catch(() => {})
       .finally(() => setStatsLoading(false));
+
+    setIssuedLoading(true);
+    fetch(`${BASE}/api/mod-issued-actions${buildQ({ ...params, mod_id: modID })}`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setIssuedActions({ warning: 0, timeout: 0, kick: 0, ban: 0, ...data }))
+      .catch(() => {})
+      .finally(() => setIssuedLoading(false));
   }, [modID, range, customStart, customEnd]);
 
   // Fetch training + notes on mount
@@ -311,6 +321,34 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
             <div className="stat-card-label">Voice Hours</div>
           </div>
         </div>
+
+        <p className="section-subtitle" style={{ marginTop: 4 }}>Moderation Actions Issued</p>
+        <div className="stat-cards">
+          <div className="stat-card">
+            <div className="stat-card-value" style={{ color: '#faa61a' }}>
+              {issuedLoading ? '—' : issuedActions.warning}
+            </div>
+            <div className="stat-card-label">Warnings</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-value" style={{ color: '#ff7043' }}>
+              {issuedLoading ? '—' : issuedActions.timeout}
+            </div>
+            <div className="stat-card-label">Timeouts</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-value" style={{ color: '#ff9800' }}>
+              {issuedLoading ? '—' : issuedActions.kick}
+            </div>
+            <div className="stat-card-label">Kicks</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-value" style={{ color: '#f04747' }}>
+              {issuedLoading ? '—' : issuedActions.ban}
+            </div>
+            <div className="stat-card-label">Bans</div>
+          </div>
+        </div>
       </section>
 
       {/* Training */}
@@ -378,6 +416,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
               >
                 <option value="warning">Warning</option>
                 <option value="timeout">Timeout</option>
+                <option value="kick">Kick</option>
                 <option value="ban">Ban</option>
               </select>
             </div>
@@ -404,10 +443,10 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {actions.map(action => {
-              const badgeColor = action.ActionType === 'ban'
-                ? 'var(--discord-red)'
-                : action.ActionType === 'timeout'
-                ? '#ff7043'
+              const badgeColor =
+                action.ActionType === 'ban'     ? 'var(--discord-red)'
+                : action.ActionType === 'kick'  ? '#ff9800'
+                : action.ActionType === 'timeout' ? '#ff7043'
                 : 'var(--discord-yellow)';
               return (
                 <div key={action.ID} style={{

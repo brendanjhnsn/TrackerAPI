@@ -84,7 +84,8 @@ func main() {
 		discordgo.IntentsGuildMessages |
 		discordgo.IntentsGuildMessageReactions |
 		discordgo.IntentsGuildVoiceStates |
-		discordgo.IntentsGuildMembers
+		discordgo.IntentsGuildMembers |
+		discordgo.IntentMessageContent
 	defer discord.Close()
 
 	ticketsMod.Register(discord)

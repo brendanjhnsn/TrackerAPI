@@ -36,9 +36,10 @@ func (m *Module) Register(s *discordgo.Session) {
 	s.AddHandler(m.onModLogMessage)
 }
 
-// onModLogMessage fires on every message. It filters to the configured modlog
-// channel, verifies the author is YAGPDB, parses the embed, and records the
-// action only if the target user holds a staff role.
+// onModLogMessage fires on every message in the configured modlog channel.
+// It records:
+//   - ModIssuedAction: always, when a moderator issues any action (tracks their activity stats)
+//   - ModAction: only when the *target* is a staff member (tracks discipline received)
 func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCreate) {
 	if m.cfg.ModLogChannelID == "" {
 		return
@@ -53,14 +54,20 @@ func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCre
 	if !inChannel {
 		return
 	}
-	if msg.Author == nil || msg.Author.ID != yagpdbAppID || len(msg.Embeds) == 0 {
+	// Accept messages from the YAGPDB bot OR from webhooks in the channel
+	// (some YAGPDB setups post via webhook with a different author ID).
+	if msg.Author == nil {
+		return
+	}
+	isYAGPDB := msg.Author.ID == yagpdbAppID || msg.WebhookID != ""
+	if !isYAGPDB || len(msg.Embeds) == 0 {
 		return
 	}
 
 	embed := msg.Embeds[0]
-
 	actionType := parseModActionType(embed.Title)
 	if actionType == "" {
+		log.Printf("[MODLOG] Unrecognised embed title %q — skipping", embed.Title)
 		return
 	}
 
@@ -68,24 +75,37 @@ func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCre
 	for _, f := range embed.Fields {
 		lower := strings.ToLower(f.Name)
 		switch {
-		case strings.Contains(lower, "moderator") || strings.Contains(lower, "responsible"):
+		case strings.Contains(lower, "moderator") || strings.Contains(lower, "responsible") || strings.Contains(lower, "staff"):
 			moderatorID = extractSnowflake(f.Value)
-		case lower == "user" || lower == "member":
+		case lower == "user" || lower == "member" || lower == "target":
 			targetID = extractSnowflake(f.Value)
 		case lower == "reason":
 			reason = f.Value
 		}
 	}
 
-	if targetID == "" {
-		log.Printf("[MODLOG] Could not parse target user from embed: %+v", embed.Fields)
-		return
+	log.Printf("[MODLOG] %s by=%s target=%s reason=%q", actionType, moderatorID, targetID, reason)
+
+	// Always record issued action so we can show how many actions each mod has done.
+	if moderatorID != "" {
+		issued := database.ModIssuedAction{
+			ModMemberID: moderatorID,
+			ActionType:  actionType,
+			Reason:      reason,
+			IssuedAt:    time.Now().UTC(),
+		}
+		if err := m.db.Create(&issued).Error; err != nil {
+			log.Printf("[MODLOG] Failed to save issued action: %v", err)
+		}
 	}
 
-	// Only track actions against staff members.
+	// Record discipline only when the target holds a staff role.
+	if targetID == "" {
+		return
+	}
 	member, err := s.GuildMember(msg.GuildID, targetID)
 	if err != nil {
-		log.Printf("[MODLOG] Failed to fetch guild member %s: %v", targetID, err)
+		log.Printf("[MODLOG] GuildMember(%s) error: %v", targetID, err)
 		return
 	}
 	isStaff := false
@@ -98,7 +118,6 @@ func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCre
 	if !isStaff {
 		return
 	}
-
 	action := database.ModAction{
 		ModMemberID:    targetID,
 		AuthorMemberID: moderatorID,
@@ -109,7 +128,7 @@ func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCre
 	if err := m.db.Create(&action).Error; err != nil {
 		log.Printf("[MODLOG] Failed to save mod action: %v", err)
 	} else {
-		log.Printf("[MODLOG] Recorded %s for mod %s by %s", actionType, targetID, moderatorID)
+		log.Printf("[MODLOG] Discipline recorded: %s against staff %s", actionType, targetID)
 	}
 }
 
@@ -120,6 +139,8 @@ func parseModActionType(title string) string {
 		return "warning"
 	case strings.Contains(lower, "timeout"), strings.Contains(lower, "timed out"), strings.Contains(lower, "muted"):
 		return "timeout"
+	case strings.Contains(lower, "kick"):
+		return "kick"
 	case strings.Contains(lower, "ban"):
 		return "ban"
 	default:
@@ -138,6 +159,7 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/training", m.handleTraining)
 	mux.HandleFunc("/api/removed-mods", m.handleRemovedMods)
 	mux.HandleFunc("/api/mod-actions", m.handleModActions)
+	mux.HandleFunc("/api/mod-issued-actions", m.handleModIssuedActions)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -450,9 +472,9 @@ func (m *Module) createModAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.ActionType {
-	case "warning", "timeout", "ban":
+	case "warning", "timeout", "ban", "kick":
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action_type must be warning, timeout, or ban"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action_type must be warning, timeout, ban, or kick"})
 		return
 	}
 	authorID, ok := auth.UserIDFromContext(r.Context())
@@ -509,4 +531,55 @@ func (m *Module) deleteModAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ----- Mod Issued Actions (how many warnings/timeouts/kicks/bans a mod has done) -----
+
+func (m *Module) handleModIssuedActions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	m.getModIssuedActions(w, r)
+}
+
+// getModIssuedActions returns counts of each action type issued by a mod within an optional date range.
+// Response: {"warning": N, "timeout": N, "kick": N, "ban": N}
+func (m *Module) getModIssuedActions(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireManagement(w, r); !ok {
+		return
+	}
+	modID := r.URL.Query().Get("mod_id")
+	if modID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mod_id is required"})
+		return
+	}
+
+	query := m.db.Model(&database.ModIssuedAction{}).Where("mod_member_id = ?", modID)
+	if start := r.URL.Query().Get("start_date"); start != "" {
+		if t, err := time.Parse("2006-01-02", start); err == nil {
+			query = query.Where("issued_at >= ?", t)
+		}
+	}
+	if end := r.URL.Query().Get("end_date"); end != "" {
+		if t, err := time.Parse("2006-01-02", end); err == nil {
+			query = query.Where("issued_at < ?", t.AddDate(0, 0, 1))
+		}
+	}
+
+	type countRow struct {
+		ActionType string
+		Count      int
+	}
+	var rows []countRow
+	if err := query.Select("action_type, count(*) as count").Group("action_type").Scan(&rows).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+
+	counts := map[string]int{"warning": 0, "timeout": 0, "kick": 0, "ban": 0}
+	for _, row := range rows {
+		counts[row.ActionType] = row.Count
+	}
+	writeJSON(w, http.StatusOK, counts)
 }

@@ -36,10 +36,16 @@ type Module struct {
 	cfg          *config.Config
 	profileMu    sync.RWMutex
 	profileCache map[string]profileCacheEntry
+	roleFetcher  *cachedRoleFetcher
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Module {
-	return &Module{db: db, cfg: cfg, profileCache: make(map[string]profileCacheEntry)}
+	return &Module{
+		db:           db,
+		cfg:          cfg,
+		profileCache: make(map[string]profileCacheEntry),
+		roleFetcher:  newCachedRoleFetcher(newDiscordRoleFetcher(cfg.DiscordToken, cfg.DiscordGuildID), 5*time.Minute),
+	}
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -168,6 +174,10 @@ func (m *Module) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if cookie, err := r.Cookie("session"); err == nil {
+		var sess database.Session
+		if m.db.Where("token = ?", cookie.Value).First(&sess).Error == nil {
+			m.roleFetcher.invalidate(sess.DiscordUserID)
+		}
 		m.db.Where("token = ?", cookie.Value).Delete(&database.Session{})
 	}
 	http.SetCookie(w, &http.Cookie{
