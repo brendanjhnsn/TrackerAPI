@@ -210,24 +210,29 @@ func extractReasonFromDesc(desc string) string {
 // YAGPDB-initiated actions are skipped here because the modlog channel listener
 // handles those and correctly attributes them to the human moderator.
 func (m *Module) onAuditLogEntry(s *discordgo.Session, entry *discordgo.GuildAuditLogEntryCreate) {
-	if entry.GuildID != m.cfg.DiscordGuildID {
-		return
-	}
+	// GuildAuditLogEntryCreate has no GuildID field in discordgo v0.28.1;
+	// the bot only connects to one guild so no guild filter is needed.
+
 	// YAGPDB is the actor when it executes slash commands — let the modlog listener handle those.
 	if entry.UserID == yagpdbAppID {
 		return
 	}
+	if entry.ActionType == nil {
+		return
+	}
 
 	var actionType string
-	switch entry.ActionType {
+	switch *entry.ActionType {
 	case discordgo.AuditLogActionMemberKick:
 		actionType = "kick"
 	case discordgo.AuditLogActionMemberBanAdd:
 		actionType = "ban"
 	case discordgo.AuditLogActionMemberUpdate:
-		// Timeout is a member update that sets communication_disabled_until.
+		// Timeout is a member update that sets communication_disabled_until to a future time.
 		for _, change := range entry.Changes {
-			if change.Key == "communication_disabled_until" && change.NewValue != nil {
+			if change.Key != nil &&
+				*change.Key == discordgo.AuditLogChangeKey("communication_disabled_until") &&
+				change.NewValue != nil {
 				actionType = "timeout"
 				break
 			}
@@ -259,7 +264,7 @@ func (m *Module) onAuditLogEntry(s *discordgo.Session, entry *discordgo.GuildAud
 	if targetID == "" {
 		return
 	}
-	member, err := s.GuildMember(entry.GuildID, targetID)
+	member, err := s.GuildMember(m.cfg.DiscordGuildID, targetID)
 	if err != nil {
 		return
 	}
