@@ -88,6 +88,13 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
 
   const [confirmRemove, setConfirmRemove] = useState(false);
 
+  const [actions, setActions]           = useState([]);
+  const [actionsLoading, setActionsLoading] = useState(false);
+  const [actionType, setActionType]     = useState('warning');
+  const [actionReason, setActionReason] = useState('');
+  const [actionDate, setActionDate]     = useState(() => new Date().toISOString().split('T')[0]);
+  const [actionSaving, setActionSaving] = useState(false);
+
   // Fetch stats when range changes
   useEffect(() => {
     if (range === 'custom' && (!customStart || !customEnd)) return;
@@ -126,6 +133,13 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
       })
       .catch(() => {})
       .finally(() => setTrainingLoading(false));
+
+    setActionsLoading(true);
+    fetch(`${BASE}/api/mod-actions?mod_id=${modID}`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => setActions(Array.isArray(list) ? list : []))
+      .catch(() => setActions([]))
+      .finally(() => setActionsLoading(false));
 
     setNotesLoading(true);
     fetch(`${BASE}/api/notes?mod_id=${modID}`, { credentials: 'include' })
@@ -171,6 +185,41 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
       }
     } catch (_) {}
     setTrainingSaving(false);
+  }
+
+  async function addAction(e) {
+    e.preventDefault();
+    setActionSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/mod-actions`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mod_member_id: modID,
+          action_type:   actionType,
+          reason:        actionReason.trim(),
+          issued_at:     actionDate,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setActions(prev => [created, ...prev]);
+        setActionReason('');
+        setActionDate(new Date().toISOString().split('T')[0]);
+      }
+    } catch (_) {}
+    setActionSaving(false);
+  }
+
+  async function deleteAction(id) {
+    try {
+      const res = await fetch(`${BASE}/api/mod-actions?id=${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.status === 204) setActions(prev => prev.filter(a => a.ID !== id));
+    } catch (_) {}
   }
 
   async function addNote(e) {
@@ -310,6 +359,89 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
               )}
             </div>
           </form>
+        )}
+      </section>
+
+      {/* Discipline */}
+      <section className="section" style={{ marginBottom: 20 }}>
+        <h3 className="section-title" style={{ fontSize: 15 }}>Discipline</h3>
+
+        <form onSubmit={addAction} style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10, alignItems: 'flex-end' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Type</label>
+              <select
+                className="form-input"
+                style={{ padding: '6px 10px', fontSize: 13 }}
+                value={actionType}
+                onChange={e => setActionType(e.target.value)}
+              >
+                <option value="warning">Warning</option>
+                <option value="timeout">Timeout</option>
+                <option value="ban">Ban</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Date</label>
+              <input type="date" className="form-input" style={{ padding: '6px 10px', fontSize: 13 }}
+                value={actionDate} onChange={e => setActionDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 10 }}>
+            <label className="form-label">Reason</label>
+            <textarea className="form-textarea" placeholder="Reason for action…" rows={2}
+              value={actionReason} onChange={e => setActionReason(e.target.value)} />
+          </div>
+          <button type="submit" className="btn btn-blurple btn-sm" disabled={actionSaving}>
+            {actionSaving ? 'Adding…' : 'Log Action'}
+          </button>
+        </form>
+
+        {actionsLoading ? (
+          <p className="loading-text">Loading…</p>
+        ) : actions.length === 0 ? (
+          <p style={{ color: 'var(--discord-muted)', fontSize: 14 }}>No actions logged.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {actions.map(action => {
+              const badgeColor = action.ActionType === 'ban'
+                ? 'var(--discord-red)'
+                : action.ActionType === 'timeout'
+                ? '#ff7043'
+                : 'var(--discord-yellow)';
+              return (
+                <div key={action.ID} style={{
+                  background: 'var(--discord-card)', borderRadius: 6,
+                  padding: '10px 14px', border: '1px solid rgba(255,255,255,0.05)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: action.Reason ? 4 : 0 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+                        background: badgeColor, color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5,
+                      }}>
+                        {action.ActionType}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--discord-muted)' }}>
+                        {fmtDate(action.IssuedAt)} · {profiles[action.AuthorMemberID]?.username || action.AuthorMemberID}
+                      </span>
+                    </div>
+                    {action.Reason && (
+                      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        {action.Reason}
+                      </p>
+                    )}
+                  </div>
+                  {isDirector && (
+                    <button className="btn btn-red btn-sm" onClick={() => deleteAction(action.ID)}>
+                      Delete
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
 

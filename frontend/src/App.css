@@ -252,7 +252,8 @@
 }
 
 .form-input,
-.form-textarea {
+.form-textarea,
+select.form-input {
   background-color: var(--discord-darker);
   border: 1px solid var(--discord-card);
   border-radius: 4px;
@@ -262,10 +263,13 @@
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .form-input:focus,
-.form-textarea:focus {
+.form-textarea:focus,
+select.form-input:focus {
   border-color: var(--discord-blurple);
 }
 

@@ -3,15 +3,24 @@ package modnotes
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
+	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 )
+
+// Official YAGPDB application ID. Change this if using a self-hosted YAGPDB instance.
+const yagpdbAppID = "204255221017214977"
+
+var snowflakeRe = regexp.MustCompile(`\d{17,19}`)
 
 type Module struct {
 	db  *gorm.DB
@@ -22,10 +31,113 @@ func New(db *gorm.DB, cfg *config.Config) *Module {
 	return &Module{db: db, cfg: cfg}
 }
 
+// Register adds the YAGPDB modlog listener to the Discord session.
+func (m *Module) Register(s *discordgo.Session) {
+	s.AddHandler(m.onModLogMessage)
+}
+
+// onModLogMessage fires on every message. It filters to the configured modlog
+// channel, verifies the author is YAGPDB, parses the embed, and records the
+// action only if the target user holds a staff role.
+func (m *Module) onModLogMessage(s *discordgo.Session, msg *discordgo.MessageCreate) {
+	if m.cfg.ModLogChannelID == "" {
+		return
+	}
+	inChannel := false
+	for _, id := range strings.Split(m.cfg.ModLogChannelID, ",") {
+		if strings.TrimSpace(id) == msg.ChannelID {
+			inChannel = true
+			break
+		}
+	}
+	if !inChannel {
+		return
+	}
+	if msg.Author == nil || msg.Author.ID != yagpdbAppID || len(msg.Embeds) == 0 {
+		return
+	}
+
+	embed := msg.Embeds[0]
+
+	actionType := parseModActionType(embed.Title)
+	if actionType == "" {
+		return
+	}
+
+	var targetID, moderatorID, reason string
+	for _, f := range embed.Fields {
+		lower := strings.ToLower(f.Name)
+		switch {
+		case strings.Contains(lower, "moderator") || strings.Contains(lower, "responsible"):
+			moderatorID = extractSnowflake(f.Value)
+		case lower == "user" || lower == "member":
+			targetID = extractSnowflake(f.Value)
+		case lower == "reason":
+			reason = f.Value
+		}
+	}
+
+	if targetID == "" {
+		log.Printf("[MODLOG] Could not parse target user from embed: %+v", embed.Fields)
+		return
+	}
+
+	// Only track actions against staff members.
+	member, err := s.GuildMember(msg.GuildID, targetID)
+	if err != nil {
+		log.Printf("[MODLOG] Failed to fetch guild member %s: %v", targetID, err)
+		return
+	}
+	isStaff := false
+	for _, roleID := range member.Roles {
+		if roleID == m.cfg.ModRoleID || roleID == m.cfg.ManagerRoleID || roleID == m.cfg.DirectorRoleID {
+			isStaff = true
+			break
+		}
+	}
+	if !isStaff {
+		return
+	}
+
+	action := database.ModAction{
+		ModMemberID:    targetID,
+		AuthorMemberID: moderatorID,
+		ActionType:     actionType,
+		Reason:         reason,
+		IssuedAt:       time.Now().UTC(),
+	}
+	if err := m.db.Create(&action).Error; err != nil {
+		log.Printf("[MODLOG] Failed to save mod action: %v", err)
+	} else {
+		log.Printf("[MODLOG] Recorded %s for mod %s by %s", actionType, targetID, moderatorID)
+	}
+}
+
+func parseModActionType(title string) string {
+	lower := strings.ToLower(title)
+	switch {
+	case strings.Contains(lower, "warn"):
+		return "warning"
+	case strings.Contains(lower, "timeout"), strings.Contains(lower, "timed out"), strings.Contains(lower, "muted"):
+		return "timeout"
+	case strings.Contains(lower, "ban"):
+		return "ban"
+	default:
+		return ""
+	}
+}
+
+// extractSnowflake pulls the first Discord snowflake ID (17–19 digits) from s.
+// YAGPDB formats IDs as either "<@123...>" or "Username (123...)" depending on version.
+func extractSnowflake(s string) string {
+	return snowflakeRe.FindString(s)
+}
+
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/notes", m.handleNotes)
 	mux.HandleFunc("/api/training", m.handleTraining)
 	mux.HandleFunc("/api/removed-mods", m.handleRemovedMods)
+	mux.HandleFunc("/api/mod-actions", m.handleModActions)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -280,4 +392,121 @@ func (m *Module) addRemovedMod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, removed)
+}
+
+// ----- Mod Actions (warnings, timeouts, bans) -----
+
+func (m *Module) handleModActions(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		m.getModActions(w, r)
+	case http.MethodPost:
+		m.createModAction(w, r)
+	case http.MethodDelete:
+		m.deleteModAction(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (m *Module) getModActions(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireManagement(w, r); !ok {
+		return
+	}
+	modID := r.URL.Query().Get("mod_id")
+	if modID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mod_id is required"})
+		return
+	}
+	var actions []database.ModAction
+	if err := m.db.Where("mod_member_id = ?", modID).Order("issued_at desc").Find(&actions).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if actions == nil {
+		actions = []database.ModAction{}
+	}
+	writeJSON(w, http.StatusOK, actions)
+}
+
+type createModActionRequest struct {
+	ModMemberID string `json:"mod_member_id"`
+	ActionType  string `json:"action_type"`
+	Reason      string `json:"reason"`
+	IssuedAt    string `json:"issued_at"` // YYYY-MM-DD
+}
+
+func (m *Module) createModAction(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireManagement(w, r); !ok {
+		return
+	}
+	var req createModActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.ModMemberID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mod_member_id is required"})
+		return
+	}
+	switch req.ActionType {
+	case "warning", "timeout", "ban":
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action_type must be warning, timeout, or ban"})
+		return
+	}
+	authorID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	issuedAt := time.Now().UTC()
+	if req.IssuedAt != "" {
+		t, err := time.Parse("2006-01-02", req.IssuedAt)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid issued_at format, use YYYY-MM-DD"})
+			return
+		}
+		issuedAt = t
+	}
+	action := database.ModAction{
+		ModMemberID:    req.ModMemberID,
+		AuthorMemberID: authorID,
+		ActionType:     req.ActionType,
+		Reason:         req.Reason,
+		IssuedAt:       issuedAt,
+	}
+	if err := m.db.Create(&action).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create action"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, action)
+}
+
+func (m *Module) deleteModAction(w http.ResponseWriter, r *http.Request) {
+	role, ok := auth.RoleFromContext(r.Context())
+	if !ok || role != auth.RoleDirector {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only directors can delete actions"})
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
+	}
+	result := m.db.Delete(&database.ModAction{}, id)
+	if result.Error != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete action"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "action not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

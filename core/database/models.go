@@ -97,3 +97,13 @@ type RemovedMod struct {
 	MemberID  string    `gorm:"uniqueIndex;not null"`
 	CreatedAt time.Time
 }
+
+type ModAction struct {
+	ID             uint      `gorm:"primaryKey"`
+	ModMemberID    string    `gorm:"index;not null"`
+	AuthorMemberID string    `gorm:"not null"`
+	ActionType     string    `gorm:"not null"` // "warning", "timeout", "ban"
+	Reason         string    `gorm:"type:text"`
+	IssuedAt       time.Time `gorm:"not null"`
+	CreatedAt      time.Time
+}

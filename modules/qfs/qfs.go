@@ -3,6 +3,7 @@ package qfs
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -179,9 +180,14 @@ func (m *Module) handleChecks(w http.ResponseWriter, r *http.Request) {
 		Count    int64  `json:"count"`
 	}
 
-	query := m.db.Model(&database.QuestionCheck{}).Where("date IS NOT NULL")
+	// Build outer WHERE filters (applied after deduplication).
+	// Each question is credited to the first mod who checked it (DISTINCT ON ordered by checked_at).
+	// This prevents double-counting when two mods accidentally react to the same question.
+	var whereParts []string
+	var args []interface{}
 	if memberID != "" {
-		query = query.Where("member_id = ?", memberID)
+		whereParts = append(whereParts, "fc.member_id = ?")
+		args = append(args, memberID)
 	}
 	if dateStr != "" {
 		d, err := time.Parse("2006-01-02", dateStr)
@@ -190,7 +196,8 @@ func (m *Module) handleChecks(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid date format, use YYYY-MM-DD"})
 			return
 		}
-		query = query.Where("date::date = ?", d)
+		whereParts = append(whereParts, "fc.date::date = ?")
+		args = append(args, d)
 	} else if startDateStr != "" && endDateStr != "" {
 		start, err := time.Parse("2006-01-02", startDateStr)
 		if err != nil {
@@ -204,14 +211,31 @@ func (m *Module) handleChecks(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid end_date format, use YYYY-MM-DD"})
 			return
 		}
-		query = query.Where("date::date >= ? AND date::date <= ?", start, end)
+		whereParts = append(whereParts, "fc.date::date >= ? AND fc.date::date <= ?")
+		args = append(args, start, end)
 	}
 
+	outerWhere := "1=1"
+	if len(whereParts) > 0 {
+		outerWhere = strings.Join(whereParts, " AND ")
+	}
+
+	rawSQL := fmt.Sprintf(`
+		WITH first_checks AS (
+			SELECT DISTINCT ON (question_id) question_id, member_id, date
+			FROM question_checks
+			WHERE removed_at IS NULL AND date IS NOT NULL
+			ORDER BY question_id, checked_at ASC
+		)
+		SELECT to_char(fc.date, 'YYYY-MM-DD') AS date, fc.member_id, count(*) AS count
+		FROM first_checks fc
+		WHERE %s
+		GROUP BY to_char(fc.date, 'YYYY-MM-DD'), fc.member_id
+		ORDER BY to_char(fc.date, 'YYYY-MM-DD') DESC
+	`, outerWhere)
+
 	var rows []DailyCheckRow
-	if err := query.Select("to_char(date, 'YYYY-MM-DD') as date, member_id, count(*) as count").
-		Group("to_char(date, 'YYYY-MM-DD'), member_id").
-		Order("to_char(date, 'YYYY-MM-DD') DESC").
-		Scan(&rows).Error; err != nil {
+	if err := m.db.Raw(rawSQL, args...).Scan(&rows).Error; err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
 		return

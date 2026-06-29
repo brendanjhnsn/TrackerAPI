@@ -91,6 +91,7 @@ func main() {
 	voiceMod.Register(discord)
 	qfsMod.Register(discord)
 	dailyMod.Register(discord)
+	modNotesMod.Register(discord)
 
 	if err := discord.Open(); err != nil {
 		log.Fatalf("Error opening Discord connection: %v", err)

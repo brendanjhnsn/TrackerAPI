@@ -28,6 +28,7 @@ type Config struct {
 	ManagerRoleID       string
 	DirectorRoleID      string
 	FrontendURL         string
+	ModLogChannelID     string
 }
 
 func Load() *Config {
@@ -54,6 +55,7 @@ func Load() *Config {
 		ManagerRoleID:       getEnv("MANAGER_ROLE_ID", ""),
 		DirectorRoleID:      getEnv("DIRECTOR_ROLE_ID", ""),
 		FrontendURL:         getEnv("FRONTEND_URL", "http://localhost:3000"),
+		ModLogChannelID:     getEnv("MODLOG_CHANNEL_ID", ""),
 	}
 }
 
