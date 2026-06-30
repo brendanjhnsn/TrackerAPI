@@ -320,7 +320,7 @@ function GameLeadDetail({ glID, profiles, setProfiles, isDirector, onBack, avail
             <label className="form-label">Add a Note</label>
             <textarea
               className="form-textarea"
-              placeholder="Write a note about this Game Lead…"
+              placeholder="Notes about this Game Lead…"
               rows={3}
               value={newNote}
               onChange={e => setNewNote(e.target.value)}
