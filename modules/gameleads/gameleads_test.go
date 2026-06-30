@@ -60,3 +60,27 @@ func TestHandleChannels_WrongMethod_Returns405(t *testing.T) {
 		t.Errorf("want 405, got %d", rec.Code)
 	}
 }
+
+func TestHandleAssignments_NoRole_Returns403(t *testing.T) {
+	m := newModule()
+	mux := http.NewServeMux()
+	m.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodGet, "/api/game-lead-assignments?user_id=123", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("want 403, got %d", rec.Code)
+	}
+}
+
+func TestHandleAssignments_WrongMethod_Returns405(t *testing.T) {
+	m := newModule()
+	mux := http.NewServeMux()
+	m.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodPatch, "/api/game-lead-assignments", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("want 405, got %d", rec.Code)
+	}
+}

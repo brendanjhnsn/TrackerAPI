@@ -98,6 +98,11 @@ type discordChannel struct {
 	ParentID string `json:"parent_id"`
 }
 
+type assignmentRequest struct {
+	UserID    string `json:"user_id"`
+	ChannelID string `json:"channel_id"`
+}
+
 // --- HTTP handlers (stubs — implemented in Tasks 3, 4, 6) ---
 
 func (m *Module) handleGameLeads(w http.ResponseWriter, r *http.Request) {
@@ -189,14 +194,80 @@ func (m *Module) handleChannels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, channels)
 }
 
-func (m *Module) handleAssignments(w http.ResponseWriter, r *http.Request) {}
-func (m *Module) handleMessages(w http.ResponseWriter, r *http.Request)    {}
-func (m *Module) handleVoice(w http.ResponseWriter, r *http.Request)       {}
-func (m *Module) handleNotes(w http.ResponseWriter, r *http.Request)       {}
+func (m *Module) handleAssignments(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		m.getAssignments(w, r)
+	case http.MethodPost:
+		m.postAssignment(w, r)
+	case http.MethodDelete:
+		m.deleteAssignment(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (m *Module) getAssignments(w http.ResponseWriter, r *http.Request) {
+	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
+		return
+	}
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+		return
+	}
+	var assignments []database.GameLeadAssignment
+	if err := m.db.Where("user_id = ?", userID).Find(&assignments).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, assignments)
+}
+
+func (m *Module) postAssignment(w http.ResponseWriter, r *http.Request) {
+	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
+		return
+	}
+	var req assignmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.UserID == "" || req.ChannelID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id and channel_id are required"})
+		return
+	}
+	assignment := database.GameLeadAssignment{UserID: req.UserID, ChannelID: req.ChannelID}
+	if err := m.db.Create(&assignment).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create assignment"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, assignment)
+}
+
+func (m *Module) deleteAssignment(w http.ResponseWriter, r *http.Request) {
+	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
+		return
+	}
+	userID := r.URL.Query().Get("user_id")
+	channelID := r.URL.Query().Get("channel_id")
+	if userID == "" || channelID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id and channel_id are required"})
+		return
+	}
+	if err := m.db.Where("user_id = ? AND channel_id = ?", userID, channelID).Delete(&database.GameLeadAssignment{}).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (m *Module) handleMessages(w http.ResponseWriter, r *http.Request) {}
+func (m *Module) handleVoice(w http.ResponseWriter, r *http.Request)    {}
+func (m *Module) handleNotes(w http.ResponseWriter, r *http.Request)    {}
 
 // suppress unused import errors until handlers are implemented
 var (
 	_ = errors.New
 	_ = log.Printf
-	_ = database.GameLeadAssignment{}
 )
