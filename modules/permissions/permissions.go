@@ -102,7 +102,10 @@ func (m *Module) getManagerPermissions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var perms []database.ManagerPermission
-	m.db.Where("manager_id IN ?", managerIDs).Find(&perms)
+	if err := m.db.Where("manager_id IN ?", managerIDs).Find(&perms).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
 
 	permMap := map[string]map[string]bool{}
 	for _, id := range managerIDs {
