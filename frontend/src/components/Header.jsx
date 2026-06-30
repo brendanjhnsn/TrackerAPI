@@ -5,6 +5,7 @@ const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 export default function Header({ currentPage, setCurrentPage }) {
   const { user, logout } = useAuth();
   const isManagement = user?.role === 'manager' || user?.role === 'director';
+  const isDirector = user?.role === 'director';
 
   return (
     <header className="header">
@@ -17,12 +18,22 @@ export default function Header({ currentPage, setCurrentPage }) {
         </span>
         {isManagement && (
           <nav className="header-nav">
-            <button
-              className={`header-nav-btn${currentPage === 'moderators' ? ' active' : ''}`}
-              onClick={() => setCurrentPage('moderators')}
-            >
-              Moderators
-            </button>
+            {user?.permissions?.moderators && (
+              <button
+                className={`header-nav-btn${currentPage === 'moderators' ? ' active' : ''}`}
+                onClick={() => setCurrentPage('moderators')}
+              >
+                Moderators
+              </button>
+            )}
+            {isDirector && (
+              <button
+                className={`header-nav-btn${currentPage === 'permissions' ? ' active' : ''}`}
+                onClick={() => setCurrentPage('permissions')}
+              >
+                Permissions
+              </button>
+            )}
           </nav>
         )}
       </div>
