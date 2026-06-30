@@ -122,7 +122,7 @@ func TestHandleMe_WithManagerRole_ReturnsManagerAndUserID(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("want 200, got %d", rec.Code)
 	}
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestHandleMe_WithDirectorRole_ReturnsDirector(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/me", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestHandleMe_WithModRole_ReturnsMod(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/me", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatal(err)
 	}

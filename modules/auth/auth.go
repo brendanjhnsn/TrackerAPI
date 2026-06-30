@@ -40,11 +40,16 @@ type Module struct {
 }
 
 func New(db *gorm.DB, cfg *config.Config) *Module {
+	var token, guildID string
+	if cfg != nil {
+		token = cfg.DiscordToken
+		guildID = cfg.DiscordGuildID
+	}
 	return &Module{
 		db:           db,
 		cfg:          cfg,
 		profileCache: make(map[string]profileCacheEntry),
-		roleFetcher:  newCachedRoleFetcher(newDiscordRoleFetcher(cfg.DiscordToken, cfg.DiscordGuildID), 5*time.Minute),
+		roleFetcher:  newCachedRoleFetcher(newDiscordRoleFetcher(token, guildID), 5*time.Minute),
 	}
 }
 
@@ -157,14 +162,32 @@ func (m *Module) handleMe(w http.ResponseWriter, r *http.Request) {
 		roleStr = "mod"
 	}
 
+	perms := map[string]bool{"moderators": false, "management_panel": false, "game_leads": false}
+	switch role {
+	case RoleDirector:
+		for k := range perms {
+			perms[k] = true
+		}
+	case RoleManager:
+		if m.db != nil {
+			for section := range perms {
+				var perm database.ManagerPermission
+				if err := m.db.Where("manager_id = ? AND section = ?", userID, section).First(&perm).Error; err == nil {
+					perms[section] = perm.Enabled
+				}
+			}
+		}
+	}
+
 	profile := m.fetchDiscordProfile(r.Context(), userID)
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"discord_user_id": userID,
 		"role":            roleStr,
 		"username":        profile.Username,
 		"avatar_url":      profile.AvatarURL,
+		"permissions":     perms,
 	})
 }
 
