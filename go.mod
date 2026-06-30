@@ -12,6 +12,7 @@ require (
 	github.com/brendanjhnsn/TrackerAPI/modules/modnotes v0.0.0
 	github.com/brendanjhnsn/TrackerAPI/modules/permissions v0.0.0
 	github.com/brendanjhnsn/TrackerAPI/modules/voicetime v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/gameleads v0.0.0
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/joho/godotenv v1.5.1
 )
@@ -44,4 +45,5 @@ replace (
 	github.com/brendanjhnsn/TrackerAPI/modules/modnotes => ./modules/modnotes
 	github.com/brendanjhnsn/TrackerAPI/modules/permissions => ./modules/permissions
 	github.com/brendanjhnsn/TrackerAPI/modules/voicetime => ./modules/voicetime
+	github.com/brendanjhnsn/TrackerAPI/modules/gameleads => ./modules/gameleads
 )

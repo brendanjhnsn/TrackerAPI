@@ -11,6 +11,7 @@ import (
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
 	"github.com/brendanjhnsn/TrackerAPI/modules/dailymessages"
+	"github.com/brendanjhnsn/TrackerAPI/modules/gameleads"
 	"github.com/brendanjhnsn/TrackerAPI/modules/loa"
 	"github.com/brendanjhnsn/TrackerAPI/modules/modnotes"
 	"github.com/brendanjhnsn/TrackerAPI/modules/permissions"
@@ -92,11 +93,15 @@ func main() {
 		discordgo.Intent(1 << 18) // GUILD_MODERATION — needed for AuditLogEntryCreate events
 	defer discord.Close()
 
+	glMod := gameleads.New(db, cfg)
+	glMod.RegisterRoutes(mux)
+
 	ticketsMod.Register(discord)
 	voiceMod.Register(discord)
 	qfsMod.Register(discord)
 	dailyMod.Register(discord)
 	modNotesMod.Register(discord)
+	glMod.Register(discord)
 
 	if err := discord.Open(); err != nil {
 		log.Fatalf("Error opening Discord connection: %v", err)
