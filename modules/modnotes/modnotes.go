@@ -13,6 +13,7 @@ import (
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
+	"github.com/brendanjhnsn/TrackerAPI/modules/permissions"
 	"github.com/bwmarrin/discordgo"
 	"gorm.io/gorm"
 )
@@ -304,10 +305,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func requireManagement(w http.ResponseWriter, r *http.Request) (auth.Role, bool) {
+func (m *Module) requireSection(w http.ResponseWriter, r *http.Request, section string) (auth.Role, bool) {
 	role, ok := auth.RoleFromContext(r.Context())
 	if !ok || (role != auth.RoleManager && role != auth.RoleDirector) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "manager or director role required"})
+		return 0, false
+	}
+	userID, _ := auth.UserIDFromContext(r.Context())
+	if !permissions.CanAccess(m.db, role == auth.RoleDirector, userID, section) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: missing " + section + " permission"})
 		return 0, false
 	}
 	return role, true
@@ -329,7 +335,7 @@ func (m *Module) handleNotes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) getNotes(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	modID := r.URL.Query().Get("mod_id")
@@ -354,7 +360,7 @@ type createNoteRequest struct {
 }
 
 func (m *Module) createNote(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	var req createNoteRequest
@@ -425,7 +431,7 @@ func (m *Module) handleTraining(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) getTraining(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	modID := r.URL.Query().Get("mod_id")
@@ -454,7 +460,7 @@ type updateTrainingRequest struct {
 }
 
 func (m *Module) updateTraining(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	var req updateTrainingRequest
@@ -513,7 +519,7 @@ func (m *Module) handleRemovedMods(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) getRemovedMods(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	var removed []database.RemovedMod
@@ -532,7 +538,7 @@ type removeModRequest struct {
 }
 
 func (m *Module) addRemovedMod(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	var req removeModRequest
@@ -568,7 +574,7 @@ func (m *Module) handleModActions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) getModActions(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	modID := r.URL.Query().Get("mod_id")
@@ -595,7 +601,7 @@ type createModActionRequest struct {
 }
 
 func (m *Module) createModAction(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	var req createModActionRequest
@@ -682,7 +688,7 @@ func (m *Module) handleModIssuedActions(w http.ResponseWriter, r *http.Request) 
 // getModIssuedActions returns counts of each action type issued by a mod within an optional date range.
 // Response: {"warning": N, "timeout": N, "kick": N, "ban": N}
 func (m *Module) getModIssuedActions(w http.ResponseWriter, r *http.Request) {
-	if _, ok := requireManagement(w, r); !ok {
+	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
 	modID := r.URL.Query().Get("mod_id")
