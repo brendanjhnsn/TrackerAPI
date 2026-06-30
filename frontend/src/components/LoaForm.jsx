@@ -144,7 +144,7 @@ export default function LoaForm() {
             <tr>
               <th>Start</th>
               <th>End</th>
-              <th>Reason</th>
+              <th>Notes</th>
               <th></th>
             </tr>
           </thead>
