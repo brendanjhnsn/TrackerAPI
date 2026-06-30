@@ -110,6 +110,8 @@ func (m *Module) onMessageCreate(s *discordgo.Session, msg *discordgo.MessageCre
 		if err := m.db.Model(&dm).Update("count", dm.Count+1).Error; err != nil {
 			log.Printf("[GAMELEADS] Failed to update daily message for %s: %v", msg.Author.ID, err)
 		}
+	} else {
+		log.Printf("[GAMELEADS] Failed to query daily message for %s: %v", msg.Author.ID, err)
 	}
 }
 
@@ -135,10 +137,12 @@ func (m *Module) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceSta
 		var vt database.GameLeadVoiceTime
 		if m.db.Where("member_id = ? AND guild_id = ? AND left_at IS NULL", vs.UserID, vs.GuildID).First(&vt).Error == nil {
 			now := time.Now().UTC()
-			m.db.Model(&vt).Updates(map[string]interface{}{
+			if err := m.db.Model(&vt).Updates(map[string]interface{}{
 				"left_at":  now,
 				"duration": int64(now.Sub(vt.JoinedAt).Seconds()),
-			})
+			}).Error; err != nil {
+				log.Printf("[GAMELEADS] Failed to close prior voice session for %s: %v", vs.UserID, err)
+			}
 		}
 		now := time.Now().UTC()
 		dateOnly := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
