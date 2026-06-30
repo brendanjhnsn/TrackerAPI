@@ -449,7 +449,11 @@ func (m *Module) postNote(w http.ResponseWriter, r *http.Request) {
 	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
 		return
 	}
-	authorID, _ := auth.UserIDFromContext(r.Context())
+	authorID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
 	var req noteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
