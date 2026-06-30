@@ -9,6 +9,7 @@ import (
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"github.com/brendanjhnsn/TrackerAPI/core/discordapi"
+	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
 	"gorm.io/gorm"
 )
 
@@ -56,10 +57,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// isDirector checks if the request context carries a Director role.
-// This is a stub that always returns false until auth.IsDirectorContext is wired in Task 4.
 func (m *Module) isDirector(r *http.Request) bool {
-	return false
+	return auth.IsDirectorContext(r)
 }
 
 func (m *Module) handleManagerPermissions(w http.ResponseWriter, r *http.Request) {

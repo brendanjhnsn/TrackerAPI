@@ -45,6 +45,13 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 	return id, ok
 }
 
+// IsDirectorContext reports whether the request context carries a Director role.
+// Exported so modules that cannot import auth directly (to avoid cycles) can still check director status.
+func IsDirectorContext(r *http.Request) bool {
+	role, ok := RoleFromContext(r.Context())
+	return ok && role == RoleDirector
+}
+
 // SessionStore abstracts session lookup for testability.
 type SessionStore interface {
 	FindValid(token string) (*database.Session, error)
