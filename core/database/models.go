@@ -123,5 +123,6 @@ type ManagerPermission struct {
 	ManagerID string    `gorm:"uniqueIndex:idx_manager_section;not null"`
 	Section   string    `gorm:"uniqueIndex:idx_manager_section;not null"`
 	Enabled   bool      `gorm:"default:false"`
+	CreatedAt time.Time
 	UpdatedAt time.Time
 }
