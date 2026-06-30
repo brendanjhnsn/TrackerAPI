@@ -221,6 +221,9 @@ func (m *Module) getAssignments(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
+	if assignments == nil {
+		assignments = []database.GameLeadAssignment{}
+	}
 	writeJSON(w, http.StatusOK, assignments)
 }
 
@@ -255,8 +258,13 @@ func (m *Module) deleteAssignment(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id and channel_id are required"})
 		return
 	}
-	if err := m.db.Where("user_id = ? AND channel_id = ?", userID, channelID).Delete(&database.GameLeadAssignment{}).Error; err != nil {
+	result := m.db.Where("user_id = ? AND channel_id = ?", userID, channelID).Delete(&database.GameLeadAssignment{})
+	if result.Error != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "assignment not found"})
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
