@@ -78,11 +78,81 @@ func (m *Module) memberHasRole(s *discordgo.Session, guildID, userID, roleID str
 	return false
 }
 
-// --- Discord event handlers (stubs — implemented in Task 5) ---
+// --- Discord event handlers ---
 
-func (m *Module) onMessageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {}
+func (m *Module) onMessageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
+	if msg.Author.Bot {
+		return
+	}
+	if !m.memberHasRole(s, msg.GuildID, msg.Author.ID, m.cfg.GameLeadRoleID) {
+		return
+	}
+	// Only count messages in channels this GL is assigned to.
+	var assignment database.GameLeadAssignment
+	if err := m.db.Where("user_id = ? AND channel_id = ?", msg.Author.ID, msg.ChannelID).First(&assignment).Error; err != nil {
+		return
+	}
+	today := time.Now().UTC()
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	var dm database.GameLeadDailyMessage
+	err := m.db.Where("user_id = ? AND channel_id = ? AND date = ?", msg.Author.ID, msg.ChannelID, today).First(&dm).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := m.db.Create(&database.GameLeadDailyMessage{
+			UserID:    msg.Author.ID,
+			ChannelID: msg.ChannelID,
+			GuildID:   msg.GuildID,
+			Date:      today,
+			Count:     1,
+		}).Error; err != nil {
+			log.Printf("[GAMELEADS] Failed to create daily message for %s: %v", msg.Author.ID, err)
+		}
+	} else if err == nil {
+		if err := m.db.Model(&dm).Update("count", dm.Count+1).Error; err != nil {
+			log.Printf("[GAMELEADS] Failed to update daily message for %s: %v", msg.Author.ID, err)
+		}
+	}
+}
 
-func (m *Module) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {}
+func (m *Module) onVoiceStateUpdate(s *discordgo.Session, vs *discordgo.VoiceStateUpdate) {
+	if !m.memberHasRole(s, vs.GuildID, vs.UserID, m.cfg.GameLeadRoleID) {
+		return
+	}
+	if vs.ChannelID == "" {
+		// GL left VC — close the open session.
+		var vt database.GameLeadVoiceTime
+		result := m.db.Where("member_id = ? AND guild_id = ? AND left_at IS NULL", vs.UserID, vs.GuildID).First(&vt)
+		if result.Error == nil {
+			now := time.Now().UTC()
+			if err := m.db.Model(&vt).Updates(map[string]interface{}{
+				"left_at":  now,
+				"duration": int64(now.Sub(vt.JoinedAt).Seconds()),
+			}).Error; err != nil {
+				log.Printf("[GAMELEADS] Failed to update voice leave for %s: %v", vs.UserID, err)
+			}
+		}
+	} else {
+		// GL joined or switched VC — close any open session, then open a new one.
+		var vt database.GameLeadVoiceTime
+		if m.db.Where("member_id = ? AND guild_id = ? AND left_at IS NULL", vs.UserID, vs.GuildID).First(&vt).Error == nil {
+			now := time.Now().UTC()
+			m.db.Model(&vt).Updates(map[string]interface{}{
+				"left_at":  now,
+				"duration": int64(now.Sub(vt.JoinedAt).Seconds()),
+			})
+		}
+		now := time.Now().UTC()
+		dateOnly := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		if err := m.db.Create(&database.GameLeadVoiceTime{
+			GuildID:   vs.GuildID,
+			MemberID:  vs.UserID,
+			ChannelID: vs.ChannelID,
+			Date:      &dateOnly,
+			JoinedAt:  now,
+		}).Error; err != nil {
+			log.Printf("[GAMELEADS] Failed to create voice session for %s: %v", vs.UserID, err)
+		}
+	}
+}
 
 // --- Types for channel endpoints ---
 
@@ -274,8 +344,3 @@ func (m *Module) handleMessages(w http.ResponseWriter, r *http.Request) {}
 func (m *Module) handleVoice(w http.ResponseWriter, r *http.Request)    {}
 func (m *Module) handleNotes(w http.ResponseWriter, r *http.Request)    {}
 
-// suppress unused import errors until handlers are implemented
-var (
-	_ = errors.New
-	_ = log.Printf
-)
