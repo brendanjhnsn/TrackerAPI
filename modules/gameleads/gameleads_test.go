@@ -84,3 +84,63 @@ func TestHandleAssignments_WrongMethod_Returns405(t *testing.T) {
 		t.Errorf("want 405, got %d", rec.Code)
 	}
 }
+
+func TestHandleMessages_NoRole_Returns403(t *testing.T) {
+	m := newModule()
+	mux := http.NewServeMux()
+	m.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodGet, "/api/game-lead-messages?user_id=123", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("want 403, got %d", rec.Code)
+	}
+}
+
+func TestHandleMessages_WrongMethod_Returns405(t *testing.T) {
+	m := newModule()
+	mux := http.NewServeMux()
+	m.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodPost, "/api/game-lead-messages", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("want 405, got %d", rec.Code)
+	}
+}
+
+func TestHandleVoice_NoRole_Returns403(t *testing.T) {
+	m := newModule()
+	mux := http.NewServeMux()
+	m.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodGet, "/api/game-lead-voice?user_id=123", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("want 403, got %d", rec.Code)
+	}
+}
+
+func TestHandleNotes_NoRole_Returns403(t *testing.T) {
+	m := newModule()
+	mux := http.NewServeMux()
+	m.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodGet, "/api/game-lead-notes?user_id=123", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("want 403, got %d", rec.Code)
+	}
+}
+
+func TestHandleNotes_WrongMethod_Returns405(t *testing.T) {
+	m := newModule()
+	mux := http.NewServeMux()
+	m.RegisterRoutes(mux)
+	req := httptest.NewRequest(http.MethodPatch, "/api/game-lead-notes", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("want 405, got %d", rec.Code)
+	}
+}

@@ -177,6 +177,11 @@ type assignmentRequest struct {
 	ChannelID string `json:"channel_id"`
 }
 
+type noteRequest struct {
+	UserID string `json:"user_id"`
+	Text   string `json:"text"`
+}
+
 // --- HTTP handlers (stubs — implemented in Tasks 3, 4, 6) ---
 
 func (m *Module) handleGameLeads(w http.ResponseWriter, r *http.Request) {
@@ -344,7 +349,147 @@ func (m *Module) deleteAssignment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (m *Module) handleMessages(w http.ResponseWriter, r *http.Request) {}
-func (m *Module) handleVoice(w http.ResponseWriter, r *http.Request)    {}
-func (m *Module) handleNotes(w http.ResponseWriter, r *http.Request)    {}
+func (m *Module) handleMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
+		return
+	}
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+		return
+	}
+	var messages []database.GameLeadDailyMessage
+	if err := m.db.Where("user_id = ?", userID).Order("date desc").Find(&messages).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if messages == nil {
+		messages = []database.GameLeadDailyMessage{}
+	}
+	writeJSON(w, http.StatusOK, messages)
+}
+
+func (m *Module) handleVoice(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
+		return
+	}
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+		return
+	}
+	type DailyVoiceRow struct {
+		Date         string `json:"date"`
+		MemberID     string `json:"member_id"`
+		TotalSeconds int64  `json:"total_seconds"`
+		Hours        int64  `json:"hours"`
+		Minutes      int64  `json:"minutes"`
+	}
+	var rows []DailyVoiceRow
+	if err := m.db.Model(&database.GameLeadVoiceTime{}).
+		Where("member_id = ? AND date IS NOT NULL", userID).
+		Select(`to_char(date, 'YYYY-MM-DD') as date, member_id,
+			COALESCE(SUM(duration), 0) as total_seconds,
+			COALESCE(SUM(duration), 0) / 3600 as hours,
+			(COALESCE(SUM(duration), 0) % 3600) / 60 as minutes`).
+		Group("to_char(date, 'YYYY-MM-DD'), member_id").
+		Order("to_char(date, 'YYYY-MM-DD') DESC").
+		Scan(&rows).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if rows == nil {
+		rows = []DailyVoiceRow{}
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
+func (m *Module) handleNotes(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		m.getNotes(w, r)
+	case http.MethodPost:
+		m.postNote(w, r)
+	case http.MethodDelete:
+		m.deleteNote(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (m *Module) getNotes(w http.ResponseWriter, r *http.Request) {
+	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
+		return
+	}
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id is required"})
+		return
+	}
+	var notes []database.GameLeadNote
+	if err := m.db.Where("user_id = ?", userID).Order("created_at desc").Find(&notes).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if notes == nil {
+		notes = []database.GameLeadNote{}
+	}
+	writeJSON(w, http.StatusOK, notes)
+}
+
+func (m *Module) postNote(w http.ResponseWriter, r *http.Request) {
+	if _, ok := m.requireSection(w, r, "game_leads"); !ok {
+		return
+	}
+	authorID, _ := auth.UserIDFromContext(r.Context())
+	var req noteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.UserID == "" || req.Text == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "user_id and text are required"})
+		return
+	}
+	note := database.GameLeadNote{UserID: req.UserID, AuthorID: authorID, Text: req.Text}
+	if err := m.db.Create(&note).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create note"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, note)
+}
+
+func (m *Module) deleteNote(w http.ResponseWriter, r *http.Request) {
+	role, ok := m.requireSection(w, r, "game_leads")
+	if !ok {
+		return
+	}
+	if role != auth.RoleDirector {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "director role required to delete notes"})
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	if idStr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	result := m.db.Where("id = ?", idStr).Delete(&database.GameLeadNote{})
+	if result.Error != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "note not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
