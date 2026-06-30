@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -237,8 +237,8 @@ function GameLeadDetail({ glID, profiles, setProfiles, isDirector, onBack, avail
             </thead>
             <tbody>
               {dailyMessages.map(row => (
-                <>
-                  <tr key={row.date}>
+                <React.Fragment key={row.date}>
+                  <tr>
                     <td>{row.date}</td>
                     <td>{row.total.toLocaleString()}</td>
                     <td>
@@ -275,7 +275,7 @@ function GameLeadDetail({ glID, profiles, setProfiles, isDirector, onBack, avail
                       );
                     })
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -417,16 +417,14 @@ export default function GameLeadsPage() {
 
   if (selectedGL) {
     return (
-      <section className="section">
-        <GameLeadDetail
-          glID={selectedGL}
-          profiles={profiles}
-          setProfiles={setProfiles}
-          isDirector={isDirector}
-          onBack={() => setSelectedGL(null)}
-          availableChannels={availableChannels}
-        />
-      </section>
+      <GameLeadDetail
+        glID={selectedGL}
+        profiles={profiles}
+        setProfiles={setProfiles}
+        isDirector={isDirector}
+        onBack={() => setSelectedGL(null)}
+        availableChannels={availableChannels}
+      />
     );
   }
 
@@ -437,7 +435,7 @@ export default function GameLeadsPage() {
       {loading ? (
         <p className="loading-text">Loading…</p>
       ) : glIDs.length === 0 ? (
-        <p className="loading-text">No Game Leads found.</p>
+        <p style={{ color: 'var(--discord-muted)', fontSize: 14 }}>No Game Leads found.</p>
       ) : (
         <table className="loa-table">
           <thead>
