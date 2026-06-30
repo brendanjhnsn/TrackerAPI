@@ -6,6 +6,7 @@ import TeamOverview from './components/TeamOverview';
 import LoaForm from './components/LoaForm';
 import ManagementPanel from './components/ManagementPanel';
 import ModeratorsPage from './components/ModeratorsPage';
+import PermissionsPage from './components/PermissionsPage';
 
 function AppContent() {
   const { user } = useAuth();
@@ -17,13 +18,15 @@ function AppContent() {
     <div className="app">
       <Header currentPage={currentPage} setCurrentPage={setCurrentPage} />
       <main className="main">
-        {currentPage === 'moderators' && isManagement ? (
+        {currentPage === 'moderators' && user?.permissions?.moderators ? (
           <ModeratorsPage />
+        ) : currentPage === 'permissions' && user?.role === 'director' ? (
+          <PermissionsPage />
         ) : (
           <>
             <TeamOverview />
             {isLoggedIn && <LoaForm />}
-            {isManagement && <ManagementPanel />}
+            {isManagement && user?.permissions?.management_panel && <ManagementPanel />}
           </>
         )}
       </main>
