@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/brendanjhnsn/TrackerAPI/core v0.0.0
+	github.com/brendanjhnsn/TrackerAPI/modules/permissions v0.0.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -23,3 +24,5 @@ require (
 )
 
 replace github.com/brendanjhnsn/TrackerAPI/core => ../../core
+
+replace github.com/brendanjhnsn/TrackerAPI/modules/permissions => ../permissions

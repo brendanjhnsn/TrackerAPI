@@ -11,6 +11,7 @@ import (
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
 	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
+	"github.com/brendanjhnsn/TrackerAPI/modules/permissions"
 	"gorm.io/gorm"
 )
 
@@ -34,6 +35,24 @@ func IsMemberOnLOA(db *gorm.DB, guildID, memberID string, today time.Time) bool 
 	return result.Error == nil
 }
 
+func (m *Module) requireSection(w http.ResponseWriter, r *http.Request, section string) bool {
+	role, ok := auth.RoleFromContext(r.Context())
+	if !ok || (role != auth.RoleManager && role != auth.RoleDirector) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "manager or director role required"})
+		return false
+	}
+	userID, _ := auth.UserIDFromContext(r.Context())
+	if !permissions.CanAccess(m.db, role == auth.RoleDirector, userID, section) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden: missing " + section + " permission"})
+		return false
+	}
+	return true
+}
+
 func (m *Module) handleLOA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch r.Method {
@@ -51,6 +70,9 @@ func (m *Module) handleLOA(w http.ResponseWriter, r *http.Request) {
 func (m *Module) getLOAs(w http.ResponseWriter, r *http.Request) {
 	var loas []database.LOA
 	if r.URL.Query().Get("all") == "true" {
+		if !m.requireSection(w, r, "management_panel") {
+			return
+		}
 		if err := m.db.Find(&loas).Error; err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
@@ -164,11 +186,10 @@ func (m *Module) deleteLOA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID, _ := auth.UserIDFromContext(r.Context())
-	role, _ := auth.RoleFromContext(r.Context())
-	if loa.MemberID != userID && role != auth.RoleManager && role != auth.RoleDirector {
-		w.WriteHeader(http.StatusForbidden)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "forbidden"})
-		return
+	if loa.MemberID != userID {
+		if !m.requireSection(w, r, "management_panel") {
+			return
+		}
 	}
 
 	if err := m.db.Delete(&loa).Error; err != nil {
