@@ -117,3 +117,11 @@ type ModIssuedAction struct {
 	IssuedAt    time.Time `gorm:"index;not null"`
 	CreatedAt   time.Time
 }
+
+type ManagerPermission struct {
+	ID        uint      `gorm:"primaryKey"`
+	ManagerID string    `gorm:"uniqueIndex:idx_manager_section;not null"`
+	Section   string    `gorm:"uniqueIndex:idx_manager_section;not null"`
+	Enabled   bool      `gorm:"default:false"`
+	UpdatedAt time.Time
+}
