@@ -38,12 +38,17 @@ func ListMembersWithRole(ctx context.Context, client *http.Client, baseURL, botT
 		if err != nil {
 			return nil, err
 		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("discord API returned status %d", resp.StatusCode)
+		}
 		var members []guildMember
 		err = json.NewDecoder(resp.Body).Decode(&members)
 		resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}
+		lastID := ""
 		for _, mem := range members {
 			if mem.User == nil {
 				continue
@@ -51,11 +56,12 @@ func ListMembersWithRole(ctx context.Context, client *http.Client, baseURL, botT
 			if hasRole(mem.Roles, roleID) {
 				result = append(result, mem.User.ID)
 			}
+			lastID = mem.User.ID
 		}
 		if len(members) < pageSize {
 			break
 		}
-		after = members[len(members)-1].User.ID
+		after = lastID
 	}
 	return result, nil
 }
