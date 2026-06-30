@@ -126,3 +126,42 @@ type ManagerPermission struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+type GameLeadAssignment struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    string    `gorm:"uniqueIndex:idx_gl_assignment;not null"`
+	ChannelID string    `gorm:"uniqueIndex:idx_gl_assignment;not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type GameLeadDailyMessage struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    string    `gorm:"uniqueIndex:idx_gl_daily_msg;not null"`
+	ChannelID string    `gorm:"uniqueIndex:idx_gl_daily_msg;not null"`
+	GuildID   string    `gorm:"not null"`
+	Date      time.Time `gorm:"uniqueIndex:idx_gl_daily_msg;not null"`
+	Count     int       `gorm:"default:0"`
+}
+
+type GameLeadVoiceTime struct {
+	ID        uint       `gorm:"primaryKey"`
+	GuildID   string     `gorm:"index;not null"`
+	MemberID  string     `gorm:"index;not null"`
+	ChannelID string
+	Date      *time.Time `gorm:"index"`
+	JoinedAt  time.Time  `gorm:"index;not null"`
+	LeftAt    *time.Time
+	Duration  int64      `gorm:"default:0"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type GameLeadNote struct {
+	ID        uint      `gorm:"primaryKey"`
+	UserID    string    `gorm:"index;not null"`
+	AuthorID  string    `gorm:"not null"`
+	Text      string    `gorm:"not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
