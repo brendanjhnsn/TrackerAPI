@@ -5,6 +5,7 @@ import Header from './components/Header';
 import TeamOverview from './components/TeamOverview';
 import LoaForm from './components/LoaForm';
 import ManagementPanel from './components/ManagementPanel';
+import GameLeadsPage from './components/GameLeadsPage';
 import ModeratorsPage from './components/ModeratorsPage';
 import PermissionsPage from './components/PermissionsPage';
 
@@ -18,7 +19,9 @@ function AppContent() {
     <div className="app">
       <Header currentPage={currentPage} setCurrentPage={setCurrentPage} />
       <main className="main">
-        {currentPage === 'moderators' && user?.permissions?.moderators ? (
+        {currentPage === 'game_leads' && user?.permissions?.game_leads ? (
+          <GameLeadsPage />
+        ) : currentPage === 'moderators' && user?.permissions?.moderators ? (
           <ModeratorsPage />
         ) : currentPage === 'permissions' && user?.role === 'director' ? (
           <PermissionsPage />

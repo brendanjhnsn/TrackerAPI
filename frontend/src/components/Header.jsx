@@ -26,6 +26,14 @@ export default function Header({ currentPage, setCurrentPage }) {
                 Moderators
               </button>
             )}
+            {user?.permissions?.game_leads && (
+              <button
+                className={`header-nav-btn${currentPage === 'game_leads' ? ' active' : ''}`}
+                onClick={() => setCurrentPage('game_leads')}
+              >
+                Game Leads
+              </button>
+            )}
             {isDirector && (
               <button
                 className={`header-nav-btn${currentPage === 'permissions' ? ' active' : ''}`}
