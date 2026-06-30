@@ -8,32 +8,12 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-// Groups GameLeadDailyMessage rows by date, sums counts across channels
-function groupByDate(messages) {
-  const map = {};
-  for (const m of messages) {
-    const date = m.Date ? m.Date.split('T')[0] : '';
-    if (!map[date]) map[date] = { date, total: 0, channels: {} };
-    map[date].total += m.Count ?? 0;
-    if (!map[date].channels[m.ChannelID]) map[date].channels[m.ChannelID] = 0;
-    map[date].channels[m.ChannelID] += m.Count ?? 0;
-  }
-  return Object.values(map).sort((a, b) => b.date.localeCompare(a.date));
-}
-
 // ---- Detail view for a single GL ----
 function GameLeadDetail({ glID, profiles, setProfiles, isDirector, onBack, availableChannels }) {
   const [assignments, setAssignments]         = useState([]);
   const [assignLoading, setAssignLoading]     = useState(true);
   const [selectedChannel, setSelectedChannel] = useState('');
   const [assignSaving, setAssignSaving]       = useState(false);
-
-  const [messages, setMessages]               = useState([]);
-  const [msgLoading, setMsgLoading]           = useState(true);
-  const [expandedDate, setExpandedDate]       = useState(null);
-
-  const [voice, setVoice]                     = useState([]);
-  const [voiceLoading, setVoiceLoading]       = useState(true);
 
   const [notes, setNotes]                     = useState([]);
   const [notesLoading, setNotesLoading]       = useState(true);
@@ -47,20 +27,6 @@ function GameLeadDetail({ glID, profiles, setProfiles, isDirector, onBack, avail
       .then(list => setAssignments(Array.isArray(list) ? list : []))
       .catch(() => setAssignments([]))
       .finally(() => setAssignLoading(false));
-
-    setMsgLoading(true);
-    fetch(`${BASE}/api/game-lead-messages?user_id=${glID}`, { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
-      .then(list => setMessages(Array.isArray(list) ? list : []))
-      .catch(() => setMessages([]))
-      .finally(() => setMsgLoading(false));
-
-    setVoiceLoading(true);
-    fetch(`${BASE}/api/game-lead-voice?user_id=${glID}`, { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
-      .then(list => setVoice(Array.isArray(list) ? list : []))
-      .catch(() => setVoice([]))
-      .finally(() => setVoiceLoading(false));
 
     setNotesLoading(true);
     fetch(`${BASE}/api/game-lead-notes?user_id=${glID}`, { credentials: 'include' })
@@ -149,7 +115,6 @@ function GameLeadDetail({ glID, profiles, setProfiles, isDirector, onBack, avail
   const name = p?.username || glID;
   const assignedIDs = new Set(assignments.map(a => a.ChannelID));
   const unassignedChannels = availableChannels.filter(c => !assignedIDs.has(c.id));
-  const dailyMessages = groupByDate(messages);
 
   return (
     <div>
@@ -216,98 +181,6 @@ function GameLeadDetail({ glID, profiles, setProfiles, isDirector, onBack, avail
               </div>
             )}
           </>
-        )}
-      </section>
-
-      {/* Message Activity */}
-      <section className="section" style={{ marginBottom: 20 }}>
-        <h3 className="section-title" style={{ fontSize: 15 }}>Message Activity</h3>
-        {msgLoading ? (
-          <p className="loading-text">Loading…</p>
-        ) : dailyMessages.length === 0 ? (
-          <p style={{ color: 'var(--discord-muted)', fontSize: 14 }}>No message activity recorded.</p>
-        ) : (
-          <table className="loa-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Total Messages</th>
-                <th>Channels</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dailyMessages.map(row => (
-                <React.Fragment key={row.date}>
-                  <tr>
-                    <td>{row.date}</td>
-                    <td>{row.total.toLocaleString()}</td>
-                    <td>
-                      {Object.keys(row.channels).length > 1 ? (
-                        <button
-                          style={{ background: 'none', border: 'none', color: 'var(--discord-blurple)',
-                            cursor: 'pointer', fontSize: 13, padding: 0 }}
-                          onClick={() => setExpandedDate(expandedDate === row.date ? null : row.date)}
-                        >
-                          {Object.keys(row.channels).length} channels {expandedDate === row.date ? '▲' : '▼'}
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: 13, color: 'var(--discord-muted)' }}>
-                          {(() => {
-                            const chID = Object.keys(row.channels)[0];
-                            const ch = availableChannels.find(c => c.id === chID);
-                            return ch ? `#${ch.name}` : chID;
-                          })()}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                  {expandedDate === row.date && (
-                    Object.entries(row.channels).map(([chID, count]) => {
-                      const ch = availableChannels.find(c => c.id === chID);
-                      return (
-                        <tr key={`${row.date}-${chID}`} style={{ background: 'rgba(255,255,255,0.02)' }}>
-                          <td style={{ paddingLeft: 24, color: 'var(--discord-muted)', fontSize: 13 }}>
-                            #{ch?.name || chID}
-                          </td>
-                          <td style={{ fontSize: 13 }}>{count.toLocaleString()}</td>
-                          <td />
-                        </tr>
-                      );
-                    })
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-
-      {/* Voice Time */}
-      <section className="section" style={{ marginBottom: 20 }}>
-        <h3 className="section-title" style={{ fontSize: 15 }}>Voice Time</h3>
-        {voiceLoading ? (
-          <p className="loading-text">Loading…</p>
-        ) : voice.length === 0 ? (
-          <p style={{ color: 'var(--discord-muted)', fontSize: 14 }}>No voice activity recorded.</p>
-        ) : (
-          <table className="loa-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Hours</th>
-                <th>Minutes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {voice.map(row => (
-                <tr key={row.date}>
-                  <td>{row.date}</td>
-                  <td>{row.hours}h</td>
-                  <td>{row.minutes}m</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         )}
       </section>
 

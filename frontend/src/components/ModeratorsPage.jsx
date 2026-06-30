@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { ViewSwitcher, BarChart, PieChart, CalendarHeatmap } from './StatsCharts';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -75,6 +76,9 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
   const [statsLoading, setStatsLoading] = useState(false);
   const [issuedActions, setIssuedActions]       = useState({ warning: 0, timeout: 0, kick: 0, ban: 0 });
   const [issuedLoading, setIssuedLoading]       = useState(false);
+  const [chartView, setChartView]             = useState('bar');
+  const [calendarData, setCalendarData]       = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
 
   const [inTraining, setInTraining]     = useState(false);
   const [trainingStart, setTrainingStart] = useState('');
@@ -128,6 +132,22 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
       .catch(() => {})
       .finally(() => setIssuedLoading(false));
   }, [modID, range, customStart, customEnd]);
+
+  // Fetch calendar data when calendar view is active
+  useEffect(() => {
+    if (chartView !== 'cal') return;
+    if (range === 'custom' && (!customStart || !customEnd)) return;
+    const controller = new AbortController();
+    const params = getQueryParams(range, customStart, customEnd);
+    const q = buildQ({ ...params, member_id: modID });
+    setCalendarLoading(true);
+    fetch(`${BASE}/api/daily-stats${q}`, { credentials: 'include', signal: controller.signal })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => setCalendarData(Array.isArray(list) ? list : []))
+      .catch(err => { if (err.name !== 'AbortError') setCalendarData([]); })
+      .finally(() => setCalendarLoading(false));
+    return () => controller.abort();
+  }, [chartView, modID, range, customStart, customEnd]);
 
   // Fetch training + notes on mount
   useEffect(() => {
@@ -290,39 +310,49 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
       {/* Stats */}
       <section className="section" style={{ marginBottom: 20 }}>
         <h3 className="section-title" style={{ fontSize: 15 }}>Stats</h3>
-        <DateRangePicker
-          range={range} setRange={setRange}
-          customStart={customStart} setCustomStart={setCustomStart}
-          customEnd={customEnd} setCustomEnd={setCustomEnd}
-        />
-        <div className="stat-cards">
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#7289da' }}>
-              {statsLoading ? '—' : (stats?.messages ?? 0).toLocaleString()}
-            </div>
-            <div className="stat-card-label">Messages</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#43b581' }}>
-              {statsLoading ? '—' : (stats?.tickets ?? 0).toLocaleString()}
-            </div>
-            <div className="stat-card-label">Tickets</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#faa61a' }}>
-              {statsLoading ? '—' : (stats?.qa ?? 0).toLocaleString()}
-            </div>
-            <div className="stat-card-label">Q&amp;A</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#f04747' }}>
-              {statsLoading ? '—' : `${stats?.voice ?? 0}h`}
-            </div>
-            <div className="stat-card-label">Voice Hours</div>
-          </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+          <DateRangePicker
+            range={range} setRange={setRange}
+            customStart={customStart} setCustomStart={setCustomStart}
+            customEnd={customEnd} setCustomEnd={setCustomEnd}
+          />
+          <ViewSwitcher view={chartView} setView={setChartView} />
         </div>
 
-        <p className="section-subtitle" style={{ marginTop: 4 }}>Moderation Actions Issued</p>
+        {statsLoading ? (
+          <p className="loading-text">Loading...</p>
+        ) : (
+          <>
+            {chartView === 'bar' && (
+              <BarChart
+                bars={[
+                  { label: 'Messages',  value: stats?.messages ?? 0, color: '#7289da' },
+                  { label: 'Tickets',   value: stats?.tickets  ?? 0, color: '#43b581' },
+                  { label: 'Q&A',       value: stats?.qa        ?? 0, color: '#faa61a' },
+                  { label: 'Voice (h)', value: stats?.voice     ?? 0, color: '#f04747' },
+                ]}
+              />
+            )}
+            {chartView === 'pie' && (
+              <PieChart
+                slices={[
+                  { label: 'Messages',  value: stats?.messages ?? 0, color: '#7289da' },
+                  { label: 'Tickets',   value: stats?.tickets  ?? 0, color: '#43b581' },
+                  { label: 'Q&A',       value: stats?.qa        ?? 0, color: '#faa61a' },
+                  { label: 'Voice (h)', value: stats?.voice     ?? 0, color: '#f04747' },
+                ].filter(s => s.value > 0)}
+              />
+            )}
+            {chartView === 'cal' && (
+              calendarLoading
+                ? <p className="loading-text">Loading calendar...</p>
+                : <CalendarHeatmap dailyData={calendarData} baseColor="#7289da" />
+            )}
+          </>
+        )}
+
+        <p className="section-subtitle" style={{ marginTop: 16 }}>Moderation Actions Issued</p>
         <div className="stat-cards">
           <div className="stat-card">
             <div className="stat-card-value" style={{ color: '#faa61a' }}>

@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ModNotesTab from './ModNotesTab';
 import ModeratorsTab from './ModeratorsTab';
+import { ViewSwitcher, BarChart, PieChart, CalendarHeatmap } from './StatsCharts';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 const TABS = ['Moderators', 'Messages', 'Tickets', 'Q&A', 'Voice Hours', 'Mod Notes'];
 const METRIC_KEY = { Messages: 'messages', Tickets: 'tickets', 'Q&A': 'qa', 'Voice Hours': 'voice' };
+
+const PIE_COLORS = ['#7289da','#43b581','#faa61a','#f04747','#b9bbbe','#ed4245','#5865f2','#eb459e'];
 
 function getQueryParams(range, customStart, customEnd) {
   const now = new Date();
@@ -70,6 +73,9 @@ export default function ManagementView() {
   const [profiles, setProfiles] = useState({});
   const [sortDir, setSortDir] = useState('desc');
   const [removedIds, setRemovedIds] = useState(new Set());
+  const [chartView, setChartView]             = useState('bar');
+  const [calendarData, setCalendarData]       = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
 
   const presets = [
     { key: '7d', label: 'Last 7 days' },
@@ -128,6 +134,20 @@ export default function ManagementView() {
       .catch(() => {});
   }, [data]);
 
+  useEffect(() => {
+    if (chartView !== 'cal') return;
+    if (range === 'custom' && (!customStart || !customEnd)) return;
+    const controller = new AbortController();
+    const q = buildQuery(getQueryParams(range, customStart, customEnd));
+    setCalendarLoading(true);
+    fetch(`${BASE}/api/daily-stats${q}`, { credentials: 'include', signal: controller.signal })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => setCalendarData(Array.isArray(list) ? list : []))
+      .catch(err => { if (err.name !== 'AbortError') setCalendarData([]); })
+      .finally(() => setCalendarLoading(false));
+    return () => controller.abort();
+  }, [chartView, range, customStart, customEnd]);
+
   async function handleRemoveMod(memberID) {
     try {
       const res = await fetch(`${BASE}/api/removed-mods`, {
@@ -156,11 +176,6 @@ export default function ManagementView() {
     return sortDir === 'desc' ? diff : -diff;
   });
 
-  function formatValue(row) {
-    if (activeTab === 'Voice Hours') return `${row.voice ?? 0}h`;
-    return (row[metricKey] ?? 0).toLocaleString();
-  }
-
   const isMetricTab = METRIC_KEY[activeTab] !== undefined;
 
   return (
@@ -172,7 +187,7 @@ export default function ManagementView() {
           <button
             key={tab}
             className={`tab-btn${activeTab === tab ? ' active' : ''}`}
-            onClick={() => { setActiveTab(tab); setSortDir('desc'); }}
+            onClick={() => { setActiveTab(tab); setSortDir('desc'); setChartView('bar'); }}
           >
             {tab}
           </button>
@@ -200,16 +215,19 @@ export default function ManagementView() {
 
       {isMetricTab && (
         <>
-          <div className="date-range-btns">
-            {presets.map(({ key, label }) => (
-              <button
-                key={key}
-                className={`date-range-btn${range === key ? ' active' : ''}`}
-                onClick={() => setRange(key)}
-              >
-                {label}
-              </button>
-            ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+            <div className="date-range-btns" style={{ marginBottom: 0 }}>
+              {presets.map(({ key, label }) => (
+                <button
+                  key={key}
+                  className={`date-range-btn${range === key ? ' active' : ''}`}
+                  onClick={() => setRange(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <ViewSwitcher view={chartView} setView={setChartView} />
           </div>
 
           {range === 'custom' && (
@@ -241,42 +259,34 @@ export default function ManagementView() {
             <p className="loading-text">Loading...</p>
           ) : range === 'custom' && (!customStart || !customEnd) ? (
             <p className="loading-text">Select a date range to view data.</p>
-          ) : sortedData.length === 0 ? (
-            <p className="loading-text">No data for this period.</p>
           ) : (
-            <table className="loa-table">
-              <thead>
-                <tr>
-                  <th>Mod</th>
-                  <th
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-                  >
-                    {activeTab} {sortDir === 'desc' ? '▼' : '▲'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedData.map(row => (
-                  <tr key={row.member_id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {profiles[row.member_id]?.avatar_url && (
-                          <img
-                            src={profiles[row.member_id].avatar_url}
-                            alt=""
-                            className="user-avatar"
-                            style={{ width: 20, height: 20 }}
-                          />
-                        )}
-                        {displayName(row.member_id)}
-                      </div>
-                    </td>
-                    <td>{formatValue(row)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              {chartView === 'bar' && (
+                <BarChart
+                  bars={sortedData.map(row => ({
+                    label: displayName(row.member_id),
+                    value: row[metricKey] ?? 0,
+                    color: '#7289da',
+                  }))}
+                />
+              )}
+              {chartView === 'pie' && (
+                <PieChart
+                  slices={sortedData
+                    .filter(row => (row[metricKey] ?? 0) > 0)
+                    .map((row, i) => ({
+                      label: displayName(row.member_id),
+                      value: row[metricKey] ?? 0,
+                      color: PIE_COLORS[i % PIE_COLORS.length],
+                    }))}
+                />
+              )}
+              {chartView === 'cal' && (
+                calendarLoading
+                  ? <p className="loading-text">Loading calendar...</p>
+                  : <CalendarHeatmap dailyData={calendarData} baseColor="#7289da" />
+              )}
+            </>
           )}
         </>
       )}
