@@ -247,7 +247,8 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
         const created = await res.json();
         setActions(prev => [created, ...prev]);
         setActionReason('');
-        setActionDate(new Date().toISOString().split('T')[0]);
+        const _d = new Date();
+        setActionDate(`${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`);
       }
     } catch (_) {}
     setActionSaving(false);
