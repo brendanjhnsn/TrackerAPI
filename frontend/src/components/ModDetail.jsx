@@ -122,6 +122,51 @@ function Modal({ open, onClose, title, children }) {
   );
 }
 
+function DetailAttachment({ att, canDelete, onDelete }) {
+  const isImage = att.MimeType.startsWith('image/');
+  const url = `${BASE}/api/attachments/file?id=${att.ID}`;
+  const kb = (att.Size / 1024).toFixed(1);
+  return (
+    <div style={{
+      background: 'var(--discord-bg)', borderRadius: 8,
+      padding: '10px 12px',
+      border: '1px solid rgba(255,255,255,0.07)',
+    }}>
+      {isImage ? (
+        <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+          <img src={url} alt={att.FileName} style={{
+            maxWidth: '100%', maxHeight: 360,
+            borderRadius: 6, display: 'block', objectFit: 'contain',
+          }} />
+        </a>
+      ) : (
+        <a href={url} download={att.FileName} style={{
+          color: 'var(--discord-blurple)', textDecoration: 'none',
+          display: 'flex', alignItems: 'center', gap: 8, fontSize: 14,
+        }}>
+          <span style={{ fontSize: 20 }}>📎</span>
+          <div>
+            <div style={{ fontWeight: 500 }}>{att.FileName}</div>
+            <div style={{ fontSize: 11, color: 'var(--discord-muted)', marginTop: 2 }}>{kb} KB</div>
+          </div>
+        </a>
+      )}
+      {canDelete && (
+        <button
+          onClick={() => onDelete(att.ID)}
+          style={{
+            marginTop: 8, background: 'none', border: '1px solid rgba(240,71,71,0.4)',
+            borderRadius: 4, cursor: 'pointer', color: 'var(--discord-red)',
+            fontSize: 12, padding: '2px 8px',
+          }}
+        >
+          Delete
+        </button>
+      )}
+    </div>
+  );
+}
+
 function AttachmentChip({ att, canDelete, onDelete }) {
   const isImage = att.MimeType.startsWith('image/');
   const url = `${BASE}/api/attachments/file?id=${att.ID}`;
@@ -178,6 +223,8 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
   const [newNote, setNewNote]         = useState('');
   const [noteSaving, setNoteSaving]   = useState(false);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
+
+  const [selectedItem, setSelectedItem] = useState(null); // { type: 'note'|'action', data }
 
   const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -831,11 +878,18 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                 : action.ActionType === 'warning'        ? 'var(--discord-yellow)'
                 : action.ActionType === 'review'         ? '#ff7043'
                 : '#7289da';
+              const attCount = (actionAttachments[action.ID] ?? []).length;
               return (
-                <div key={action.ID} style={{
-                  background: 'var(--discord-card)', borderRadius: 6,
-                  padding: '10px 14px', border: '1px solid rgba(255,255,255,0.05)',
-                }}>
+                <div key={action.ID}
+                  onClick={() => setSelectedItem({ type: 'action', data: action })}
+                  style={{
+                    background: 'var(--discord-card)', borderRadius: 6,
+                    padding: '10px 14px', border: '1px solid rgba(255,255,255,0.05)',
+                    cursor: 'pointer', transition: 'border-color 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(114,137,218,0.4)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: action.Reason ? 4 : 0 }}>
@@ -848,31 +902,26 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                         <span style={{ fontSize: 12, color: 'var(--discord-muted)' }}>
                           {fmtDate(action.IssuedAt)} · {profiles[action.AuthorMemberID]?.username || action.AuthorMemberID}
                         </span>
+                        {attCount > 0 && (
+                          <span style={{ fontSize: 11, color: 'var(--discord-muted)' }}>
+                            📎 {attCount}
+                          </span>
+                        )}
                       </div>
                       {action.Reason && (
-                        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+                          overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                           {action.Reason}
                         </p>
                       )}
                     </div>
                     {canManage && (
-                      <button className="btn btn-red btn-sm" onClick={() => deleteAction(action.ID)}>
+                      <button className="btn btn-red btn-sm"
+                        onClick={e => { e.stopPropagation(); deleteAction(action.ID); }}>
                         Delete
                       </button>
                     )}
                   </div>
-                  {(actionAttachments[action.ID] ?? []).length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                      {(actionAttachments[action.ID] ?? []).map(att => (
-                        <AttachmentChip
-                          key={att.ID}
-                          att={att}
-                          canDelete={canManage}
-                          onDelete={id => deleteAttachment('action', action.ID, id)}
-                        />
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -895,38 +944,38 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
           <p style={{ color: 'var(--discord-muted)', fontSize: 14 }}>No notes yet.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {notes.map(note => (
-              <div key={note.ID} style={{
-                background: 'var(--discord-card)', borderRadius: 6,
-                padding: '10px 14px', border: '1px solid rgba(255,255,255,0.05)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                  <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', flex: 1 }}>
-                    {note.Content}
-                  </p>
-                  {canManage && (
-                    <button className="btn btn-red btn-sm" onClick={() => deleteNote(note.ID)}>
-                      Delete
-                    </button>
-                  )}
-                </div>
-                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--discord-muted)' }}>
-                  {profiles[note.AuthorMemberID]?.username || note.AuthorMemberID} · {fmtTimestamp(note.CreatedAt)}
-                </p>
-                {(noteAttachments[note.ID] ?? []).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                    {(noteAttachments[note.ID] ?? []).map(att => (
-                      <AttachmentChip
-                        key={att.ID}
-                        att={att}
-                        canDelete={canManage}
-                        onDelete={id => deleteAttachment('note', note.ID, id)}
-                      />
-                    ))}
+            {notes.map(note => {
+              const attCount = (noteAttachments[note.ID] ?? []).length;
+              return (
+                <div key={note.ID}
+                  onClick={() => setSelectedItem({ type: 'note', data: note })}
+                  style={{
+                    background: 'var(--discord-card)', borderRadius: 6,
+                    padding: '10px 14px', border: '1px solid rgba(255,255,255,0.05)',
+                    cursor: 'pointer', transition: 'border-color 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(114,137,218,0.4)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                    <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', flex: 1,
+                      overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
+                      {note.Content}
+                    </p>
+                    {canManage && (
+                      <button className="btn btn-red btn-sm"
+                        onClick={e => { e.stopPropagation(); deleteNote(note.ID); }}>
+                        Delete
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                  <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--discord-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>{profiles[note.AuthorMemberID]?.username || note.AuthorMemberID} · {fmtTimestamp(note.CreatedAt)}</span>
+                    {attCount > 0 && <span>📎 {attCount}</span>}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -1073,6 +1122,111 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Detail view — click a note or action card to open */}
+      <Modal
+        open={selectedItem !== null}
+        onClose={() => setSelectedItem(null)}
+        title={
+          selectedItem?.type === 'action'
+            ? (ACTION_TYPE_LABELS[selectedItem.data.ActionType] ?? selectedItem.data.ActionType.replace(/_/g, ' ').toUpperCase())
+            : 'Note'
+        }
+      >
+        {selectedItem?.type === 'action' && (() => {
+          const action = selectedItem.data;
+          const badgeColor =
+            action.ActionType === 'performance_plan' ? '#ff0000'
+            : action.ActionType === 'action_plan'    ? 'var(--discord-red)'
+            : action.ActionType === 'warning'        ? 'var(--discord-yellow)'
+            : action.ActionType === 'review'         ? '#ff7043'
+            : '#7289da';
+          const atts = actionAttachments[action.ID] ?? [];
+          return (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <span style={{
+                  fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 10,
+                  background: badgeColor, color: '#fff', letterSpacing: 0.5,
+                }}>
+                  {ACTION_TYPE_LABELS[action.ActionType] ?? action.ActionType.replace(/_/g, ' ').toUpperCase()}
+                </span>
+                <span style={{ fontSize: 13, color: 'var(--discord-muted)' }}>
+                  {fmtDate(action.IssuedAt)} · {profiles[action.AuthorMemberID]?.username || action.AuthorMemberID}
+                </span>
+              </div>
+              {action.Reason && (
+                <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {action.Reason}
+                </p>
+              )}
+              {atts.length > 0 && (
+                <div>
+                  <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--discord-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Attachments ({atts.length})
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {atts.map(att => (
+                      <DetailAttachment
+                        key={att.ID}
+                        att={att}
+                        canDelete={canManage}
+                        onDelete={id => {
+                          deleteAttachment('action', action.ID, id);
+                          setSelectedItem(prev => prev
+                            ? { ...prev, data: prev.data }
+                            : null
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {atts.length === 0 && (
+                <p style={{ fontSize: 13, color: 'var(--discord-muted)' }}>No attachments.</p>
+              )}
+            </div>
+          );
+        })()}
+
+        {selectedItem?.type === 'note' && (() => {
+          const note = selectedItem.data;
+          const atts = noteAttachments[note.ID] ?? [];
+          return (
+            <div>
+              <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--discord-muted)' }}>
+                {profiles[note.AuthorMemberID]?.username || note.AuthorMemberID} · {fmtTimestamp(note.CreatedAt)}
+              </p>
+              <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                {note.Content}
+              </p>
+              {atts.length > 0 && (
+                <div>
+                  <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--discord-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Attachments ({atts.length})
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {atts.map(att => (
+                      <DetailAttachment
+                        key={att.ID}
+                        att={att}
+                        canDelete={canManage}
+                        onDelete={id => {
+                          deleteAttachment('note', note.ID, id);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {atts.length === 0 && (
+                <p style={{ fontSize: 13, color: 'var(--discord-muted)' }}>No attachments.</p>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );
