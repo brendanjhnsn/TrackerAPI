@@ -79,6 +79,49 @@ export function DateRangePicker({ range, setRange, customStart, setCustomStart, 
   );
 }
 
+function Modal({ open, onClose, title, children }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.75)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '24px 16px',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: '#2c2f33',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 10, padding: '24px 28px',
+        width: '100%', maxWidth: 500,
+        maxHeight: '90vh', overflowY: 'auto',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.6)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--discord-text)' }}>{title}</span>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--discord-muted)', fontSize: 22, lineHeight: 1, padding: '0 2px',
+            }}
+          >×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function AttachmentChip({ att, canDelete, onDelete }) {
   const isImage = att.MimeType.startsWith('image/');
   const url = `${BASE}/api/attachments/file?id=${att.ID}`;
@@ -134,6 +177,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
   const [notesLoading, setNotesLoading] = useState(false);
   const [newNote, setNewNote]         = useState('');
   const [noteSaving, setNoteSaving]   = useState(false);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
 
   const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -146,6 +190,15 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const [actionSaving, setActionSaving] = useState(false);
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+
+  const [loas, setLoas]               = useState([]);
+  const [loasLoading, setLoasLoading] = useState(false);
+  const [loaStart, setLoaStart]       = useState('');
+  const [loaEnd, setLoaEnd]           = useState('');
+  const [loaReason, setLoaReason]     = useState('');
+  const [loaSaving, setLoaSaving]     = useState(false);
+  const [loaModalOpen, setLoaModalOpen] = useState(false);
 
   const noteFileInputRef   = useRef(null);
   const actionFileInputRef = useRef(null);
@@ -272,7 +325,35 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
       })
       .catch(() => setNotes([]))
       .finally(() => setNotesLoading(false));
+
+    setLoasLoading(true);
+    fetch(`${BASE}/api/loa?member_id=${modID}`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => setLoas(Array.isArray(list) ? list : []))
+      .catch(() => setLoas([]))
+      .finally(() => setLoasLoading(false));
   }, [modID]);
+
+  function closeNoteModal() {
+    setNoteModalOpen(false);
+    setNewNote('');
+    setNoteFiles([]);
+    if (noteFileInputRef.current) noteFileInputRef.current.value = '';
+  }
+
+  function closeActionModal() {
+    setActionModalOpen(false);
+    setActionReason('');
+    setActionFiles([]);
+    if (actionFileInputRef.current) actionFileInputRef.current.value = '';
+  }
+
+  function closeLoaModal() {
+    setLoaModalOpen(false);
+    setLoaStart('');
+    setLoaEnd('');
+    setLoaReason('');
+  }
 
   async function saveTraining(e) {
     e.preventDefault();
@@ -316,9 +397,6 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
       if (res.ok) {
         const created = await res.json();
         setActions(prev => [created, ...prev]);
-        setActionReason('');
-        const _d = new Date();
-        setActionDate(`${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`);
         if (actionFiles.length > 0) {
           const newAtts = [];
           for (const file of actionFiles) {
@@ -338,9 +416,10 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               [created.ID]: [...(prev[created.ID] ?? []), ...newAtts],
             }));
           }
-          setActionFiles([]);
-          if (actionFileInputRef.current) actionFileInputRef.current.value = '';
         }
+        const _d = new Date();
+        setActionDate(`${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`);
+        closeActionModal();
       }
     } catch (_) {}
     setActionSaving(false);
@@ -370,7 +449,6 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
       if (res.ok) {
         const created = await res.json();
         setNotes(prev => [created, ...prev]);
-        setNewNote('');
         if (noteFiles.length > 0) {
           const newAtts = [];
           for (const file of noteFiles) {
@@ -390,9 +468,8 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               [created.ID]: [...(prev[created.ID] ?? []), ...newAtts],
             }));
           }
-          setNoteFiles([]);
-          if (noteFileInputRef.current) noteFileInputRef.current.value = '';
         }
+        closeNoteModal();
       }
     } catch (_) {}
     setNoteSaving(false);
@@ -407,6 +484,41 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
       if (res.status === 204) {
         setNotes(prev => prev.filter(n => n.ID !== id));
       }
+    } catch (_) {}
+  }
+
+  async function addLOA(e) {
+    e.preventDefault();
+    if (!loaStart || !loaEnd) return;
+    setLoaSaving(true);
+    try {
+      const res = await fetch(`${BASE}/api/loa`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          member_id:  modID,
+          reason:     loaReason.trim(),
+          start_date: loaStart,
+          end_date:   loaEnd,
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setLoas(prev => [created, ...prev]);
+        closeLoaModal();
+      }
+    } catch (_) {}
+    setLoaSaving(false);
+  }
+
+  async function deleteLOA(id) {
+    try {
+      const res = await fetch(`${BASE}/api/loa?id=${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.status === 204) setLoas(prev => prev.filter(l => l.ID !== id));
     } catch (_) {}
   }
 
@@ -427,6 +539,8 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
 
   const p = profiles[modID];
   const name = p?.username || modID;
+
+  const canManage = !readOnly && (isDirector || isManager);
 
   return (
     <div>
@@ -618,69 +732,53 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
         )}
       </section>
 
+      {/* Leave of Absence */}
+      <section className="section" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 className="section-title" style={{ fontSize: 15, margin: 0 }}>Leave of Absence</h3>
+          {canManage && (
+            <button className="btn btn-blurple btn-sm" onClick={() => setLoaModalOpen(true)}>+ Add LOA</button>
+          )}
+        </div>
+        {loasLoading ? (
+          <p className="loading-text">Loading...</p>
+        ) : loas.length === 0 ? (
+          <p style={{ color: 'var(--discord-muted)', fontSize: 14 }}>No LOA records.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {loas.map(loa => (
+              <div key={loa.ID} style={{
+                background: 'var(--discord-card)', borderRadius: 6,
+                padding: '10px 14px', border: '1px solid rgba(255,255,255,0.05)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10,
+              }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: loa.Reason ? 4 : 0 }}>
+                    {fmtDate(loa.StartDate)} – {fmtDate(loa.EndDate)}
+                  </div>
+                  {loa.Reason && (
+                    <p style={{ margin: 0, fontSize: 13, color: 'var(--discord-muted)', lineHeight: 1.4 }}>
+                      {loa.Reason}
+                    </p>
+                  )}
+                </div>
+                {canManage && (
+                  <button className="btn btn-red btn-sm" onClick={() => deleteLOA(loa.ID)}>Delete</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Actions */}
       <section className="section" style={{ marginBottom: 20 }}>
-        <h3 className="section-title" style={{ fontSize: 15 }}>Actions</h3>
-
-        {!readOnly && (
-          <form onSubmit={addAction} style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10, alignItems: 'flex-end' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Type</label>
-                <select
-                  className="form-input"
-                  style={{ padding: '6px 10px', fontSize: 13 }}
-                  value={actionType}
-                  onChange={e => setActionType(e.target.value)}
-                >
-                  <option value="1_on_1">1 On 1</option>
-                  <option value="review">Review</option>
-                  <option value="warning">Warning</option>
-                  <option value="action_plan">Action Plan</option>
-                </select>
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Date</label>
-                <input type="date" className="form-input" style={{ padding: '6px 10px', fontSize: 13 }}
-                  value={actionDate} onChange={e => setActionDate(e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group" style={{ marginBottom: 10 }}>
-              <label className="form-label">Reason</label>
-              <textarea className="form-textarea" placeholder="Reason for action…" rows={2}
-                value={actionReason} onChange={e => setActionReason(e.target.value)} />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button type="submit" className="btn btn-blurple btn-sm" disabled={actionSaving}>
-                {actionSaving ? 'Adding…' : 'Log Action'}
-              </button>
-              <input
-                ref={actionFileInputRef}
-                type="file"
-                multiple
-                accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv"
-                style={{ display: 'none' }}
-                onChange={e => setActionFiles(Array.from(e.target.files))}
-              />
-              <button type="button" className="btn btn-muted btn-sm"
-                onClick={() => actionFileInputRef.current?.click()}>
-                📎 Attach files
-              </button>
-            </div>
-            {actionFiles.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {actionFiles.map((f, i) => (
-                  <span key={i} style={{ fontSize: 12, background: 'var(--discord-bg)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {f.name}
-                    <button type="button"
-                      onClick={() => setActionFiles(prev => prev.filter((_, j) => j !== i))}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--discord-muted)', padding: 0 }}>×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </form>
-        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 className="section-title" style={{ fontSize: 15, margin: 0 }}>Actions</h3>
+          {canManage && (
+            <button className="btn btn-blurple btn-sm" onClick={() => setActionModalOpen(true)}>+ Log Action</button>
+          )}
+        </div>
 
         {actionsLoading ? (
           <p className="loading-text">Loading…</p>
@@ -719,7 +817,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                         </p>
                       )}
                     </div>
-                    {!readOnly && (isDirector || isManager) && (
+                    {canManage && (
                       <button className="btn btn-red btn-sm" onClick={() => deleteAction(action.ID)}>
                         Delete
                       </button>
@@ -731,7 +829,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                         <AttachmentChip
                           key={att.ID}
                           att={att}
-                          canDelete={!readOnly && (isDirector || isManager)}
+                          canDelete={canManage}
                           onDelete={id => deleteAttachment('action', action.ID, id)}
                         />
                       ))}
@@ -740,58 +838,18 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                 </div>
               );
             })}
-
           </div>
         )}
       </section>
 
       {/* Notes */}
       <section className="section">
-        <h3 className="section-title" style={{ fontSize: 15 }}>Notes</h3>
-
-        {!readOnly && (
-          <form onSubmit={addNote} style={{ marginBottom: 20 }}>
-            <div className="form-group" style={{ marginBottom: 10 }}>
-              <label className="form-label">Add a Note</label>
-              <textarea
-                className="form-textarea"
-                placeholder="Write a note about this mod…"
-                rows={3}
-                value={newNote}
-                onChange={e => setNewNote(e.target.value)}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-              <button type="submit" className="btn btn-blurple btn-sm" disabled={noteSaving || !newNote.trim()}>
-                {noteSaving ? 'Adding…' : 'Add Note'}
-              </button>
-              <input
-                ref={noteFileInputRef}
-                type="file"
-                multiple
-                accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv"
-                style={{ display: 'none' }}
-                onChange={e => setNoteFiles(Array.from(e.target.files))}
-              />
-              <button type="button" className="btn btn-muted btn-sm"
-                onClick={() => noteFileInputRef.current?.click()}>
-                📎 Attach files
-              </button>
-            </div>
-            {noteFiles.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {noteFiles.map((f, i) => (
-                  <span key={i} style={{ fontSize: 12, background: 'var(--discord-bg)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {f.name}
-                    <button type="button"
-                      onClick={() => setNoteFiles(prev => prev.filter((_, j) => j !== i))}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--discord-muted)', padding: 0 }}>×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </form>
-        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 className="section-title" style={{ fontSize: 15, margin: 0 }}>Notes</h3>
+          {canManage && (
+            <button className="btn btn-blurple btn-sm" onClick={() => setNoteModalOpen(true)}>+ Add Note</button>
+          )}
+        </div>
 
         {notesLoading ? (
           <p className="loading-text">Loading notes…</p>
@@ -808,7 +866,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                   <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', flex: 1 }}>
                     {note.Content}
                   </p>
-                  {!readOnly && (isDirector || isManager) && (
+                  {canManage && (
                     <button className="btn btn-red btn-sm" onClick={() => deleteNote(note.ID)}>
                       Delete
                     </button>
@@ -823,7 +881,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                       <AttachmentChip
                         key={att.ID}
                         att={att}
-                        canDelete={!readOnly && (isDirector || isManager)}
+                        canDelete={canManage}
                         onDelete={id => deleteAttachment('note', note.ID, id)}
                       />
                     ))}
@@ -834,6 +892,148 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
           </div>
         )}
       </section>
+
+      {/* ── Modals ── */}
+
+      <Modal open={noteModalOpen} onClose={closeNoteModal} title="Add Note">
+        <form onSubmit={addNote}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Note</label>
+            <textarea
+              className="form-textarea"
+              placeholder="Write a note about this mod…"
+              rows={4}
+              value={newNote}
+              onChange={e => setNewNote(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: noteFiles.length > 0 ? 10 : 0, flexWrap: 'wrap' }}>
+            <input
+              ref={noteFileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv"
+              style={{ display: 'none' }}
+              onChange={e => setNoteFiles(Array.from(e.target.files))}
+            />
+            <button type="button" className="btn btn-muted btn-sm"
+              onClick={() => noteFileInputRef.current?.click()}>
+              📎 Attach files
+            </button>
+          </div>
+          {noteFiles.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              {noteFiles.map((f, i) => (
+                <span key={i} style={{ fontSize: 12, background: 'var(--discord-bg)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {f.name}
+                  <button type="button"
+                    onClick={() => setNoteFiles(prev => prev.filter((_, j) => j !== i))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--discord-muted)', padding: 0 }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+            <button type="button" className="btn btn-muted btn-sm" onClick={closeNoteModal}>Cancel</button>
+            <button type="submit" className="btn btn-blurple btn-sm" disabled={noteSaving || !newNote.trim()}>
+              {noteSaving ? 'Adding…' : 'Add Note'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={actionModalOpen} onClose={closeActionModal} title="Log Action">
+        <form onSubmit={addAction}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 140 }}>
+              <label className="form-label">Type</label>
+              <select
+                className="form-input"
+                style={{ padding: '6px 10px', fontSize: 13, width: '100%' }}
+                value={actionType}
+                onChange={e => setActionType(e.target.value)}
+              >
+                <option value="1_on_1">1 On 1</option>
+                <option value="review">Review</option>
+                <option value="warning">Warning</option>
+                <option value="action_plan">Action Plan</option>
+                <option value="performance_plan">Performance Plan</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 140 }}>
+              <label className="form-label">Date</label>
+              <input type="date" className="form-input" style={{ padding: '6px 10px', fontSize: 13, width: '100%' }}
+                value={actionDate} onChange={e => setActionDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Reason</label>
+            <textarea className="form-textarea" placeholder="Reason for action…" rows={3}
+              value={actionReason} onChange={e => setActionReason(e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: actionFiles.length > 0 ? 10 : 0, flexWrap: 'wrap' }}>
+            <input
+              ref={actionFileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv"
+              style={{ display: 'none' }}
+              onChange={e => setActionFiles(Array.from(e.target.files))}
+            />
+            <button type="button" className="btn btn-muted btn-sm"
+              onClick={() => actionFileInputRef.current?.click()}>
+              📎 Attach files
+            </button>
+          </div>
+          {actionFiles.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              {actionFiles.map((f, i) => (
+                <span key={i} style={{ fontSize: 12, background: 'var(--discord-bg)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  {f.name}
+                  <button type="button"
+                    onClick={() => setActionFiles(prev => prev.filter((_, j) => j !== i))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--discord-muted)', padding: 0 }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+            <button type="button" className="btn btn-muted btn-sm" onClick={closeActionModal}>Cancel</button>
+            <button type="submit" className="btn btn-blurple btn-sm" disabled={actionSaving}>
+              {actionSaving ? 'Logging…' : 'Log Action'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={loaModalOpen} onClose={closeLoaModal} title="Add Leave of Absence">
+        <form onSubmit={addLOA}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 140 }}>
+              <label className="form-label">Start Date</label>
+              <input type="date" className="form-input" style={{ padding: '6px 10px', fontSize: 13, width: '100%' }}
+                value={loaStart} onChange={e => setLoaStart(e.target.value)} required />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 140 }}>
+              <label className="form-label">End Date</label>
+              <input type="date" className="form-input" style={{ padding: '6px 10px', fontSize: 13, width: '100%' }}
+                value={loaEnd} onChange={e => setLoaEnd(e.target.value)} required />
+            </div>
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Reason (optional)</label>
+            <textarea className="form-textarea" placeholder="Reason for leave…" rows={3}
+              value={loaReason} onChange={e => setLoaReason(e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
+            <button type="button" className="btn btn-muted btn-sm" onClick={closeLoaModal}>Cancel</button>
+            <button type="submit" className="btn btn-blurple btn-sm" disabled={loaSaving || !loaStart || !loaEnd}>
+              {loaSaving ? 'Saving…' : 'Save LOA'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -90,6 +90,15 @@ func (m *Module) getLOAs(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
 			return
 		}
+	} else if memberID := r.URL.Query().Get("member_id"); memberID != "" {
+		if !m.requireSection(w, r, "management_panel") {
+			return
+		}
+		if err := m.db.Where("member_id = ?", memberID).Order("start_date desc").Find(&loas).Error; err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "database error"})
+			return
+		}
 	} else {
 		now := time.Now().UTC()
 		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
@@ -120,9 +129,12 @@ func (m *Module) createLOA(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid request body"})
 		return
 	}
-	if req.GuildID == "" || req.MemberID == "" {
+	if req.GuildID == "" {
+		req.GuildID = m.cfg.DiscordGuildID
+	}
+	if req.MemberID == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": "guild_id and member_id are required"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "member_id is required"})
 		return
 	}
 	startDate, err := time.Parse("2006-01-02", req.StartDate)
