@@ -96,7 +96,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
 
   const [actions, setActions]           = useState([]);
   const [actionsLoading, setActionsLoading] = useState(false);
-  const [actionType, setActionType]     = useState('warning');
+  const [actionType, setActionType]     = useState('1_on_1');
   const [actionReason, setActionReason] = useState('');
   const [actionDate, setActionDate]     = useState(() => new Date().toISOString().split('T')[0]);
   const [actionSaving, setActionSaving] = useState(false);
@@ -461,9 +461,9 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
         )}
       </section>
 
-      {/* Discipline */}
+      {/* Actions */}
       <section className="section" style={{ marginBottom: 20 }}>
-        <h3 className="section-title" style={{ fontSize: 15 }}>Discipline</h3>
+        <h3 className="section-title" style={{ fontSize: 15 }}>Actions</h3>
 
         <form onSubmit={addAction} style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10, alignItems: 'flex-end' }}>
@@ -475,10 +475,10 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
                 value={actionType}
                 onChange={e => setActionType(e.target.value)}
               >
+                <option value="1_on_1">1 on 1</option>
+                <option value="review">Review</option>
                 <option value="warning">Warning</option>
-                <option value="timeout">Timeout</option>
-                <option value="kick">Kick</option>
-                <option value="ban">Ban</option>
+                <option value="performance_plan">Performance Plan</option>
               </select>
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
@@ -505,10 +505,10 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {actions.map(action => {
               const badgeColor =
-                action.ActionType === 'ban'     ? 'var(--discord-red)'
-                : action.ActionType === 'kick'  ? '#ff9800'
-                : action.ActionType === 'timeout' ? '#ff7043'
-                : 'var(--discord-yellow)';
+                action.ActionType === 'performance_plan' ? 'var(--discord-red)'
+                : action.ActionType === 'warning'        ? 'var(--discord-yellow)'
+                : action.ActionType === 'review'         ? '#ff7043'
+                : '#7289da';
               return (
                 <div key={action.ID} style={{
                   background: 'var(--discord-card)', borderRadius: 6,

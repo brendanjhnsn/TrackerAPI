@@ -102,7 +102,7 @@ type ModAction struct {
 	ID             uint      `gorm:"primaryKey"`
 	ModMemberID    string    `gorm:"index;not null"`
 	AuthorMemberID string    `gorm:"not null"`
-	ActionType     string    `gorm:"not null"` // "warning", "timeout", "ban", "kick"
+	ActionType     string    `gorm:"not null"` // "1_on_1", "review", "warning", "performance_plan"
 	Reason         string    `gorm:"type:text"`
 	IssuedAt       time.Time `gorm:"not null"`
 	CreatedAt      time.Time
