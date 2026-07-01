@@ -322,25 +322,52 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
 
         {statsLoading ? (
           <p className="loading-text">Loading...</p>
+        ) : chartView === 'num' ? (
+          <div className="stat-cards">
+            <div className="stat-card">
+              <div className="stat-card-value" style={{ color: '#7289da' }}>{(stats?.messages ?? 0).toLocaleString()}</div>
+              <div className="stat-card-label">Messages</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card-value" style={{ color: '#43b581' }}>{(stats?.tickets ?? 0).toLocaleString()}</div>
+              <div className="stat-card-label">Tickets</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card-value" style={{ color: '#faa61a' }}>{(stats?.qa ?? 0).toLocaleString()}</div>
+              <div className="stat-card-label">Q&amp;A</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card-value" style={{ color: '#f04747' }}>{stats?.voice ?? 0}h</div>
+              <div className="stat-card-label">Voice</div>
+            </div>
+          </div>
         ) : (
           <>
             {chartView === 'bar' && (
               <BarChart
                 bars={[
-                  { label: 'Messages',  value: stats?.messages ?? 0, color: '#7289da' },
-                  { label: 'Tickets',   value: stats?.tickets  ?? 0, color: '#43b581' },
-                  { label: 'Q&A',       value: stats?.qa        ?? 0, color: '#faa61a' },
-                  { label: 'Voice (h)', value: stats?.voice     ?? 0, color: '#f04747' },
+                  { label: 'Messages',  value: stats?.messages          ?? 0, color: '#7289da' },
+                  { label: 'Tickets',   value: stats?.tickets           ?? 0, color: '#43b581' },
+                  { label: 'Q&A',       value: stats?.qa                ?? 0, color: '#faa61a' },
+                  { label: 'Voice (h)', value: stats?.voice             ?? 0, color: '#f04747' },
+                  { label: 'Warnings',  value: issuedActions.warning    ?? 0, color: '#faa61a' },
+                  { label: 'Timeouts',  value: issuedActions.timeout    ?? 0, color: '#ff7043' },
+                  { label: 'Kicks',     value: issuedActions.kick       ?? 0, color: '#ff9800' },
+                  { label: 'Bans',      value: issuedActions.ban        ?? 0, color: '#ed4245' },
                 ]}
               />
             )}
             {chartView === 'pie' && (
               <PieChart
                 slices={[
-                  { label: 'Messages',  value: stats?.messages ?? 0, color: '#7289da' },
-                  { label: 'Tickets',   value: stats?.tickets  ?? 0, color: '#43b581' },
-                  { label: 'Q&A',       value: stats?.qa        ?? 0, color: '#faa61a' },
-                  { label: 'Voice (h)', value: stats?.voice     ?? 0, color: '#f04747' },
+                  { label: 'Messages',  value: stats?.messages          ?? 0, color: '#7289da' },
+                  { label: 'Tickets',   value: stats?.tickets           ?? 0, color: '#43b581' },
+                  { label: 'Q&A',       value: stats?.qa                ?? 0, color: '#faa61a' },
+                  { label: 'Voice (h)', value: stats?.voice             ?? 0, color: '#f04747' },
+                  { label: 'Warnings',  value: issuedActions.warning    ?? 0, color: '#faa61a' },
+                  { label: 'Timeouts',  value: issuedActions.timeout    ?? 0, color: '#ff7043' },
+                  { label: 'Kicks',     value: issuedActions.kick       ?? 0, color: '#ff9800' },
+                  { label: 'Bans',      value: issuedActions.ban        ?? 0, color: '#ed4245' },
                 ].filter(s => s.value > 0)}
               />
             )}

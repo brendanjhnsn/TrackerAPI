@@ -3,6 +3,8 @@ import { useState } from 'react';
 // ---- View Switcher ----
 // view: 'bar' | 'pie' | 'cal'
 // setView: (v: string) => void
+// view: 'bar' | 'pie' | 'cal' | 'num'  ('num' = numbers/stats, no chart)
+// Clicking the active chart button toggles back to 'num'.
 export function ViewSwitcher({ view, setView }) {
   const views = [
     { key: 'bar', label: '▌ Bar' },
@@ -14,7 +16,7 @@ export function ViewSwitcher({ view, setView }) {
       {views.map(v => (
         <button
           key={v.key}
-          onClick={() => setView(v.key)}
+          onClick={() => setView(view === v.key ? 'num' : v.key)}
           style={{
             padding: '5px 14px', border: 'none', fontSize: 12, cursor: 'pointer',
             background: view === v.key ? 'var(--discord-blurple)' : 'var(--discord-card)',
@@ -90,13 +92,17 @@ export function PieChart({ slices = [] }) {
 }
 
 // ---- Calendar Heatmap ----
-// dailyData: [{ date: 'YYYY-MM-DD', messages: number, tickets: number, qa: number, voice_hours: number }]
+// dailyData: [{ date: 'YYYY-MM-DD', messages, tickets, qa, voice_hours, warning, timeout, kick, ban }]
 // baseColor: CSS hex color string, e.g. '#7289da'
 const TOOLTIP_METRICS = [
   { label: 'Messages', key: 'messages',    color: '#7289da' },
   { label: 'Tickets',  key: 'tickets',     color: '#43b581' },
   { label: 'Q&A',      key: 'qa',          color: '#faa61a' },
   { label: 'Voice',    key: 'voice_hours', color: '#f04747', suffix: 'h' },
+  { label: 'Warnings', key: 'warning',     color: '#faa61a' },
+  { label: 'Timeouts', key: 'timeout',     color: '#ff7043' },
+  { label: 'Kicks',    key: 'kick',        color: '#ff9800' },
+  { label: 'Bans',     key: 'ban',         color: '#ed4245' },
 ];
 
 export function CalendarHeatmap({ dailyData, baseColor = '#7289da' }) {
@@ -110,7 +116,10 @@ export function CalendarHeatmap({ dailyData, baseColor = '#7289da' }) {
   for (const row of dailyData) dataByDate[row.date] = row;
 
   const maxActivity = Math.max(
-    ...dailyData.map(d => (d.messages || 0) + (d.tickets || 0) + (d.qa || 0) + (d.voice_hours || 0)),
+    ...dailyData.map(d =>
+      (d.messages || 0) + (d.tickets || 0) + (d.qa || 0) + (d.voice_hours || 0) +
+      (d.warning || 0) + (d.timeout || 0) + (d.kick || 0) + (d.ban || 0)
+    ),
     1
   );
 
@@ -157,34 +166,36 @@ export function CalendarHeatmap({ dailyData, baseColor = '#7289da' }) {
       </div>
 
       {/* Day-of-week headers */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, maxWidth: 294, marginBottom: 4 }}>
-        {['M','T','W','T','F','S','S'].map((d, i) => (
-          <div key={i} style={{ fontSize: 9, color: 'var(--discord-muted)', textAlign: 'center' }}>{d}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6, marginBottom: 6 }}>
+        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d, i) => (
+          <div key={i} style={{ fontSize: 11, color: 'var(--discord-muted)', textAlign: 'center', fontWeight: 500 }}>{d}</div>
         ))}
       </div>
 
       {/* Calendar cells */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, maxWidth: 294 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 6 }}>
         {cells.map((day, i) => {
           if (day === null) return <div key={`e-${i}`} />;
           const dateStr = `${year}-${String(mon + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
           const d = dataByDate[dateStr];
-          const activity = d ? (d.messages || 0) + (d.tickets || 0) + (d.qa || 0) + (d.voice_hours || 0) : 0;
+          const activity = d
+            ? (d.messages || 0) + (d.tickets || 0) + (d.qa || 0) + (d.voice_hours || 0) +
+              (d.warning || 0) + (d.timeout || 0) + (d.kick || 0) + (d.ban || 0)
+            : 0;
           const opacity = activity > 0 ? Math.max(0.12, (activity / maxActivity) * 0.88 + 0.07) : 0.06;
           return (
             <div
               key={dateStr}
               style={{
                 background: `rgba(${r},${g},${b},${opacity})`,
-                borderRadius: 3, aspectRatio: '1',
+                borderRadius: 4, aspectRatio: '1',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, color: 'var(--discord-text)',
+                fontSize: 12, color: 'var(--discord-text)', fontWeight: 500,
               }}
               onMouseEnter={e => {
-                if (!d) return;
                 const tipW = 200;
                 const x = e.clientX + 14 + tipW > window.innerWidth ? e.clientX - tipW - 4 : e.clientX + 14;
-                setTooltip({ visible: true, x, y: e.clientY - 10, data: { dateStr, ...d } });
+                setTooltip({ visible: true, x, y: e.clientY - 10, data: { dateStr, ...(d || {}) } });
               }}
               onMouseMove={e => setTooltip(t => {
                 if (!t.visible) return t;

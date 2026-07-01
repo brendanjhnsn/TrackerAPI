@@ -6,8 +6,15 @@ import { ViewSwitcher, BarChart, PieChart, CalendarHeatmap } from './StatsCharts
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
-const TABS = ['Moderators', 'Messages', 'Tickets', 'Q&A', 'Voice Hours', 'Mod Notes'];
-const METRIC_KEY = { Messages: 'messages', Tickets: 'tickets', 'Q&A': 'qa', 'Voice Hours': 'voice' };
+const TABS = ['Moderators', 'Messages', 'Tickets', 'Q&A', 'Voice Hours', 'Warnings', 'Timeouts', 'Kicks', 'Bans', 'Mod Notes'];
+const METRIC_KEY = {
+  Messages: 'messages', Tickets: 'tickets', 'Q&A': 'qa', 'Voice Hours': 'voice',
+  Warnings: 'warning', Timeouts: 'timeout', Kicks: 'kick', Bans: 'ban',
+};
+const METRIC_COLOR = {
+  messages: '#7289da', tickets: '#43b581', qa: '#faa61a', voice: '#f04747',
+  warning: '#faa61a', timeout: '#ff7043', kick: '#ff9800', ban: '#ed4245',
+};
 
 const PIE_COLORS = ['#7289da','#43b581','#faa61a','#f04747','#b9bbbe','#ed4245','#5865f2','#eb459e'];
 
@@ -39,23 +46,32 @@ function buildQuery(params) {
   return q ? `?${q}` : '';
 }
 
-function buildData(messages, tickets, qa, voice) {
+const EMPTY_ROW = () => ({ messages: 0, tickets: 0, qa: 0, voice: 0, warning: 0, timeout: 0, kick: 0, ban: 0 });
+
+function buildData(messages, tickets, qa, voice, actions) {
   const data = {};
   for (const row of messages) {
-    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, messages: 0, tickets: 0, qa: 0, voice: 0 };
+    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, ...EMPTY_ROW() };
     data[row.member_id].messages += row.count ?? 0;
   }
   for (const row of tickets) {
-    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, messages: 0, tickets: 0, qa: 0, voice: 0 };
+    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, ...EMPTY_ROW() };
     data[row.member_id].tickets += row.tickets ?? 0;
   }
   for (const row of qa) {
-    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, messages: 0, tickets: 0, qa: 0, voice: 0 };
+    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, ...EMPTY_ROW() };
     data[row.member_id].qa += row.count ?? 0;
   }
   for (const row of voice) {
-    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, messages: 0, tickets: 0, qa: 0, voice: 0 };
+    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, ...EMPTY_ROW() };
     data[row.member_id].voice += Math.round((row.total_seconds ?? 0) / 3600);
+  }
+  for (const row of actions) {
+    if (!data[row.member_id]) data[row.member_id] = { member_id: row.member_id, ...EMPTY_ROW() };
+    data[row.member_id].warning += row.warning ?? 0;
+    data[row.member_id].timeout += row.timeout ?? 0;
+    data[row.member_id].kick    += row.kick    ?? 0;
+    data[row.member_id].ban     += row.ban     ?? 0;
   }
   return Object.values(data);
 }
@@ -107,13 +123,15 @@ export default function ManagementView() {
       fetch(`${BASE}/api/tickets${q}`).then(r => r.ok ? r.json() : []),
       fetch(`${BASE}/api/qfs${q}`).then(r => r.ok ? r.json() : []),
       fetch(`${BASE}/api/voice${q}`).then(r => r.ok ? r.json() : []),
+      fetch(`${BASE}/api/mod-issued-actions${q}`, { credentials: 'include' }).then(r => r.ok ? r.json() : []),
     ])
-      .then(([messages, tickets, qa, voice]) => {
+      .then(([messages, tickets, qa, voice, actions]) => {
         setData(buildData(
           Array.isArray(messages) ? messages : [],
-          Array.isArray(tickets) ? tickets : [],
-          Array.isArray(qa) ? qa : [],
-          Array.isArray(voice) ? voice : [],
+          Array.isArray(tickets)  ? tickets  : [],
+          Array.isArray(qa)       ? qa       : [],
+          Array.isArray(voice)    ? voice    : [],
+          Array.isArray(actions)  ? actions  : [],
         ));
       })
       .catch(() => {})
@@ -266,7 +284,7 @@ export default function ManagementView() {
                   bars={sortedData.map(row => ({
                     label: displayName(row.member_id),
                     value: row[metricKey] ?? 0,
-                    color: '#7289da',
+                    color: METRIC_COLOR[metricKey] ?? '#7289da',
                   }))}
                 />
               )}
@@ -284,7 +302,29 @@ export default function ManagementView() {
               {chartView === 'cal' && (
                 calendarLoading
                   ? <p className="loading-text">Loading calendar...</p>
-                  : <CalendarHeatmap dailyData={calendarData} baseColor="#7289da" />
+                  : <CalendarHeatmap dailyData={calendarData} baseColor={METRIC_COLOR[metricKey] ?? '#7289da'} />
+              )}
+              {chartView === 'num' && (
+                sortedData.length === 0
+                  ? <p style={{ color: 'var(--discord-muted)', fontSize: 14 }}>No data for this period.</p>
+                  : <table className="loa-table">
+                      <thead>
+                        <tr>
+                          <th>Moderator</th>
+                          <th style={{ textAlign: 'right' }}>{activeTab}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedData.map(row => (
+                          <tr key={row.member_id}>
+                            <td>{displayName(row.member_id)}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: METRIC_COLOR[metricKey] ?? 'var(--discord-text)' }}>
+                              {(row[metricKey] ?? 0).toLocaleString()}{metricKey === 'voice' ? 'h' : ''}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
               )}
             </>
           )}

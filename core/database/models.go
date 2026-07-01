@@ -127,6 +127,15 @@ type ManagerPermission struct {
 	UpdatedAt time.Time
 }
 
+type ModPermission struct {
+	ID        uint      `gorm:"primaryKey"`
+	MemberID  string    `gorm:"uniqueIndex:idx_mod_section;not null"`
+	Section   string    `gorm:"uniqueIndex:idx_mod_section;not null"`
+	Enabled   bool      `gorm:"default:false"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
 type GameLeadAssignment struct {
 	ID        uint      `gorm:"primaryKey"`
 	UserID    string    `gorm:"uniqueIndex:idx_gl_assignment;not null"`

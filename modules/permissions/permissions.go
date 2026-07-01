@@ -19,6 +19,11 @@ var validSections = map[string]bool{
 	"game_leads":       true,
 }
 
+var validModSections = map[string]bool{
+	"moderators": true,
+	"game_leads": true,
+}
+
 type Module struct {
 	db  *gorm.DB
 	cfg *config.Config
@@ -30,6 +35,8 @@ func New(db *gorm.DB, cfg *config.Config) *Module {
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/manager-permissions", m.handleManagerPermissions)
+	mux.HandleFunc("/api/mod-permissions", m.handleModPermissions)
+	mux.HandleFunc("/api/all-role-permissions", m.handleAllRolePermissions)
 }
 
 // CanAccess reports whether the requesting user may access the given section.
@@ -129,6 +136,21 @@ type putPermissionRequest struct {
 	Enabled   bool   `json:"enabled"`
 }
 
+type directorRow struct {
+	MemberID string `json:"member_id"`
+}
+
+type modPermissionRow struct {
+	MemberID    string          `json:"member_id"`
+	Permissions map[string]bool `json:"permissions"`
+}
+
+type allRolePermissionsResponse struct {
+	Directors []directorRow      `json:"directors"`
+	Managers  []permissionRow    `json:"managers"`
+	Mods      []modPermissionRow `json:"mods"`
+}
+
 func (m *Module) putManagerPermission(w http.ResponseWriter, r *http.Request) {
 	if !m.isDirector(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "director role required"})
@@ -152,6 +174,173 @@ func (m *Module) putManagerPermission(w http.ResponseWriter, r *http.Request) {
 	err := m.db.Where("manager_id = ? AND section = ?", req.ManagerID, req.Section).First(&perm).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		perm = database.ManagerPermission{ManagerID: req.ManagerID, Section: req.Section, Enabled: req.Enabled}
+		if err := m.db.Create(&perm).Error; err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create permission"})
+			return
+		}
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	} else {
+		perm.Enabled = req.Enabled
+		if err := m.db.Save(&perm).Error; err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update permission"})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, perm)
+}
+
+// --- GET /api/all-role-permissions ---
+
+func (m *Module) handleAllRolePermissions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	m.getAllRolePermissions(w, r)
+}
+
+func (m *Module) getAllRolePermissions(w http.ResponseWriter, r *http.Request) {
+	if !m.isDirector(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "director role required"})
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	type roleResult struct {
+		ids []string
+		err error
+	}
+	dirCh := make(chan roleResult, 1)
+	mgrCh := make(chan roleResult, 1)
+	modCh := make(chan roleResult, 1)
+
+	fetch := func(roleID string, ch chan<- roleResult) {
+		ids, err := discordapi.ListMembersWithRole(
+			r.Context(), client, discordapi.DefaultBaseURL,
+			m.cfg.DiscordToken, m.cfg.DiscordGuildID, roleID, 1000,
+		)
+		ch <- roleResult{ids, err}
+	}
+	go fetch(m.cfg.DirectorRoleID, dirCh)
+	go fetch(m.cfg.ManagerRoleID, mgrCh)
+	go fetch(m.cfg.ModRoleID, modCh)
+
+	dirRes := <-dirCh
+	mgrRes := <-mgrCh
+	modRes := <-modCh
+
+	if dirRes.err != nil || mgrRes.err != nil || modRes.err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "could not fetch role lists from Discord"})
+		return
+	}
+
+	directorIDs := dirRes.ids
+	managerIDs := mgrRes.ids
+	modIDs := modRes.ids
+
+	// Query manager permissions
+	var managerPerms []database.ManagerPermission
+	if len(managerIDs) > 0 {
+		if err := m.db.Where("manager_id IN ?", managerIDs).Find(&managerPerms).Error; err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+			return
+		}
+	}
+
+	// Query mod permissions
+	var modPerms []database.ModPermission
+	if len(modIDs) > 0 {
+		if err := m.db.Where("member_id IN ?", modIDs).Find(&modPerms).Error; err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+			return
+		}
+	}
+
+	// Build directors
+	directors := make([]directorRow, 0, len(directorIDs))
+	for _, id := range directorIDs {
+		directors = append(directors, directorRow{MemberID: id})
+	}
+
+	// Build managers (default all false, overlay DB values)
+	mgrPermMap := make(map[string]map[string]bool, len(managerIDs))
+	for _, id := range managerIDs {
+		mgrPermMap[id] = map[string]bool{"moderators": false, "management_panel": false, "game_leads": false}
+	}
+	for _, p := range managerPerms {
+		if row, ok := mgrPermMap[p.ManagerID]; ok {
+			row[p.Section] = p.Enabled
+		}
+	}
+	managers := make([]permissionRow, 0, len(managerIDs))
+	for _, id := range managerIDs {
+		managers = append(managers, permissionRow{ManagerID: id, Permissions: mgrPermMap[id]})
+	}
+
+	// Build mods (default all false, overlay DB values)
+	modPermMap := make(map[string]map[string]bool, len(modIDs))
+	for _, id := range modIDs {
+		modPermMap[id] = map[string]bool{"moderators": false, "game_leads": false}
+	}
+	for _, p := range modPerms {
+		if row, ok := modPermMap[p.MemberID]; ok {
+			row[p.Section] = p.Enabled
+		}
+	}
+	mods := make([]modPermissionRow, 0, len(modIDs))
+	for _, id := range modIDs {
+		mods = append(mods, modPermissionRow{MemberID: id, Permissions: modPermMap[id]})
+	}
+
+	writeJSON(w, http.StatusOK, allRolePermissionsResponse{
+		Directors: directors,
+		Managers:  managers,
+		Mods:      mods,
+	})
+}
+
+// --- PUT /api/mod-permissions ---
+
+func (m *Module) handleModPermissions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	m.putModPermission(w, r)
+}
+
+type putModPermissionRequest struct {
+	MemberID string `json:"member_id"`
+	Section  string `json:"section"`
+	Enabled  bool   `json:"enabled"`
+}
+
+func (m *Module) putModPermission(w http.ResponseWriter, r *http.Request) {
+	if !m.isDirector(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "director role required"})
+		return
+	}
+	var req putModPermissionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.MemberID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "member_id is required"})
+		return
+	}
+	if !validModSections[req.Section] {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "section must be one of: moderators, game_leads"})
+		return
+	}
+
+	var perm database.ModPermission
+	err := m.db.Where("member_id = ? AND section = ?", req.MemberID, req.Section).First(&perm).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		perm = database.ModPermission{MemberID: req.MemberID, Section: req.Section, Enabled: req.Enabled}
 		if err := m.db.Create(&perm).Error; err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create permission"})
 			return

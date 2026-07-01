@@ -39,6 +39,8 @@ export default function PermissionsPage() {
     fetch(`${BASE}/api/all-role-permissions`, { credentials: 'include' })
       .then(r => {
         if (!r.ok) throw new Error(`${r.status}`);
+        const ct = r.headers.get('content-type') || '';
+        if (!ct.includes('json')) throw new Error('endpoint not yet available');
         return r.json();
       })
       .then(data => {
@@ -63,7 +65,11 @@ export default function PermissionsPage() {
             .catch(() => {});
         }
       })
-      .catch(err => setError(`Failed to load permissions: ${err.message}`))
+      .catch(err => setError(
+        err.message === 'endpoint not yet available'
+          ? 'The permissions endpoint hasn\'t been set up on the backend yet. See GET /api/all-role-permissions.'
+          : `Failed to load permissions: ${err.message}`
+      ))
       .finally(() => setLoading(false));
   }, []);
 
