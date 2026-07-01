@@ -27,6 +27,7 @@ func New(db *gorm.DB, cfg *config.Config) *Module {
 func (m *Module) Register(s *discordgo.Session) {
 	s.AddHandler(m.onMessageCreate)
 	s.AddHandler(m.onReactionAdd)
+	s.AddHandler(m.onReactionRemove)
 }
 
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -158,6 +159,37 @@ func (m *Module) onReactionAdd(s *discordgo.Session, r *discordgo.MessageReactio
 		log.Printf("[ERROR] Failed to query existing question check: %v", err)
 	} else {
 		log.Printf("[CHECKMARK] Duplicate check prevented for member %s on question %s", r.UserID, r.MessageID)
+	}
+}
+
+func (m *Module) onReactionRemove(s *discordgo.Session, r *discordgo.MessageReactionRemove) {
+	if m.cfg.QFSChannelID == "" || r.ChannelID != m.cfg.QFSChannelID {
+		return
+	}
+	em := r.Emoji.Name
+	isCheckmark := em == "✅" || em == "✔️" || em == "✔" || em == "☑️" || em == "☑"
+	if !isCheckmark {
+		return
+	}
+
+	var q database.Question
+	err := m.db.Where("message_id = ?", r.MessageID).First(&q).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return
+	}
+	if err != nil {
+		log.Printf("[CHECKMARK] Failed to query question for reaction remove: %v", err)
+		return
+	}
+
+	now := time.Now().UTC()
+	result := m.db.Model(&database.QuestionCheck{}).
+		Where("question_id = ? AND member_id = ? AND removed_at IS NULL", q.ID, r.UserID).
+		Update("removed_at", now)
+	if result.Error != nil {
+		log.Printf("[CHECKMARK] Failed to soft-delete question check: %v", result.Error)
+	} else if result.RowsAffected > 0 {
+		log.Printf("[CHECKMARK] Removed checkmark credit for %s on question %s", r.UserID, r.MessageID)
 	}
 }
 
