@@ -274,6 +274,8 @@ func (m *Module) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	m.roleFetcher.invalidate(userID)
+
 	sess := database.Session{
 		Token:         sessionToken,
 		DiscordUserID: userID,
