@@ -181,3 +181,15 @@ type GameLeadNote struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+type Attachment struct {
+	ID         uint      `gorm:"primaryKey"`
+	OwnerType  string    `gorm:"index;not null"` // "note" or "action"
+	OwnerID    uint      `gorm:"index;not null"`
+	FileName   string    `gorm:"not null"`
+	StoredName string    `gorm:"not null"`
+	MimeType   string    `gorm:"not null"`
+	Size       int64     `gorm:"not null"`
+	UploadedBy string    `gorm:"not null"`
+	CreatedAt  time.Time
+}

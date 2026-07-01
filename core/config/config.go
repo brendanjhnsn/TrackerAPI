@@ -31,6 +31,7 @@ type Config struct {
 	ModLogChannelID     string
 	GameLeadRoleID     string
 	GameLeadCategoryID string
+	UploadsDir string
 }
 
 func Load() *Config {
@@ -60,6 +61,7 @@ func Load() *Config {
 		ModLogChannelID:     getEnv("MODLOG_CHANNEL_ID", ""),
 		GameLeadRoleID:     getEnv("GAME_LEAD_ROLE_ID", ""),
 		GameLeadCategoryID: getEnv("GAME_LEAD_CATEGORY_ID", ""),
+		UploadsDir: getEnv("UPLOADS_DIR", "uploads"),
 	}
 }
 
