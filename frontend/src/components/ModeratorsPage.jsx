@@ -98,7 +98,10 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
   const [actionsLoading, setActionsLoading] = useState(false);
   const [actionType, setActionType]     = useState('1_on_1');
   const [actionReason, setActionReason] = useState('');
-  const [actionDate, setActionDate]     = useState(() => new Date().toISOString().split('T')[0]);
+  const [actionDate, setActionDate]     = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [actionSaving, setActionSaving] = useState(false);
 
   // Fetch stats + issued action counts when range changes
