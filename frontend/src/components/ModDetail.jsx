@@ -208,6 +208,44 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
   const [actionAttachments, setActionAttachments] = useState({});
 
   useEffect(() => {
+    if (!noteModalOpen) return;
+    const onPaste = e => {
+      const imgs = Array.from(e.clipboardData?.items ?? [])
+        .filter(i => i.kind === 'file' && i.type.startsWith('image/'));
+      if (imgs.length === 0) return;
+      e.preventDefault();
+      const files = imgs.map(item => {
+        const f = item.getAsFile();
+        if (!f) return null;
+        const ext = f.type.split('/')[1] || 'png';
+        return new File([f], `pasted-${Date.now()}.${ext}`, { type: f.type });
+      }).filter(Boolean);
+      setNoteFiles(prev => [...prev, ...files]);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [noteModalOpen]);
+
+  useEffect(() => {
+    if (!actionModalOpen) return;
+    const onPaste = e => {
+      const imgs = Array.from(e.clipboardData?.items ?? [])
+        .filter(i => i.kind === 'file' && i.type.startsWith('image/'));
+      if (imgs.length === 0) return;
+      e.preventDefault();
+      const files = imgs.map(item => {
+        const f = item.getAsFile();
+        if (!f) return null;
+        const ext = f.type.split('/')[1] || 'png';
+        return new File([f], `pasted-${Date.now()}.${ext}`, { type: f.type });
+      }).filter(Boolean);
+      setActionFiles(prev => [...prev, ...files]);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [actionModalOpen]);
+
+  useEffect(() => {
     if (range === 'custom' && (!customStart || !customEnd)) return;
     const params = getQueryParams(range, customStart, customEnd);
     const q = buildQ({ ...params, member_id: modID });
@@ -908,7 +946,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               autoFocus
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: noteFiles.length > 0 ? 10 : 0, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
             <input
               ref={noteFileInputRef}
               type="file"
@@ -921,6 +959,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               onClick={() => noteFileInputRef.current?.click()}>
               📎 Attach files
             </button>
+            <span style={{ fontSize: 12, color: 'var(--discord-muted)' }}>or paste an image (Ctrl+V)</span>
           </div>
           {noteFiles.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
@@ -972,7 +1011,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
             <textarea className="form-textarea" placeholder="Reason for action…" rows={3}
               value={actionReason} onChange={e => setActionReason(e.target.value)} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: actionFiles.length > 0 ? 10 : 0, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
             <input
               ref={actionFileInputRef}
               type="file"
@@ -985,6 +1024,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               onClick={() => actionFileInputRef.current?.click()}>
               📎 Attach files
             </button>
+            <span style={{ fontSize: 12, color: 'var(--discord-muted)' }}>or paste an image (Ctrl+V)</span>
           </div>
           {actionFiles.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>

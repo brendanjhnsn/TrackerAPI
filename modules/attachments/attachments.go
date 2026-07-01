@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -146,13 +147,27 @@ func (m *Module) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	// Detect MIME from first 512 bytes, then seek back
+	// Detect MIME from first 512 bytes, then seek back.
 	buf := make([]byte, 512)
 	n, _ := file.Read(buf)
 	mimeType := http.DetectContentType(buf[:n])
+	// Strip parameters — DetectContentType can return "text/plain; charset=utf-8".
+	if idx := strings.Index(mimeType, ";"); idx != -1 {
+		mimeType = strings.TrimSpace(mimeType[:idx])
+	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
+	}
+	// DetectContentType returns "application/zip" for .docx/.xlsx because they are ZIP archives.
+	// Fall back to extension-based detection for types that sniffing cannot distinguish.
+	if !allowedMIME[mimeType] {
+		if extMIME := mime.TypeByExtension(filepath.Ext(header.Filename)); extMIME != "" {
+			if idx := strings.Index(extMIME, ";"); idx != -1 {
+				extMIME = strings.TrimSpace(extMIME[:idx])
+			}
+			mimeType = extMIME
+		}
 	}
 	if !allowedMIME[mimeType] {
 		http.Error(w, "file type not allowed", http.StatusUnprocessableEntity)
