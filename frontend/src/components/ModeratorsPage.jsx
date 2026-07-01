@@ -42,6 +42,11 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { timeZone: 'UTC' });
 }
 
+function fmtTimestamp(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString();
+}
+
 function toDateInput(iso) {
   if (!iso) return '';
   return iso.split('T')[0];
@@ -600,7 +605,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
                   )}
                 </div>
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--discord-muted)' }}>
-                  {profiles[note.AuthorMemberID]?.username || note.AuthorMemberID} · {fmtDate(note.CreatedAt)}
+                  {profiles[note.AuthorMemberID]?.username || note.AuthorMemberID} · {fmtTimestamp(note.CreatedAt)}
                 </p>
               </div>
             ))}
