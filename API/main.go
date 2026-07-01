@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendanjhnsn/TrackerAPI/core/config"
 	"github.com/brendanjhnsn/TrackerAPI/core/database"
+	"github.com/brendanjhnsn/TrackerAPI/modules/attachments"
 	"github.com/brendanjhnsn/TrackerAPI/modules/auth"
 	"github.com/brendanjhnsn/TrackerAPI/modules/dailymessages"
 	"github.com/brendanjhnsn/TrackerAPI/modules/dailystats"
@@ -59,6 +60,7 @@ func main() {
 	modNotesMod     := modnotes.New(db, cfg)
 	permissionsMod  := permissions.New(db, cfg)
 	dailyStatsMod   := dailystats.New(db, cfg)
+	attachmentsMod  := attachments.New(db, cfg)
 
 	mux := http.NewServeMux()
 	// SPA static file server — serves the built React app from ./dist.
@@ -75,6 +77,7 @@ func main() {
 	modNotesMod.RegisterRoutes(mux)
 	permissionsMod.RegisterRoutes(mux)
 	dailyStatsMod.RegisterRoutes(mux)
+	attachmentsMod.RegisterRoutes(mux)
 
 	go func() {
 		log.Printf("Starting API server on port %s", cfg.ServerPort)
