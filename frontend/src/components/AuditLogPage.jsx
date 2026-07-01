@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import ModDetail from './ModDetail';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
@@ -22,11 +24,13 @@ const TABS = [
 ];
 
 export default function AuditLogPage() {
+  const { user } = useAuth();
   const [tab, setTab]           = useState('notes');
   const [search, setSearch]     = useState('');
   const [data, setData]         = useState([]);
   const [loading, setLoading]   = useState(false);
   const [profiles, setProfiles] = useState({});
+  const [selectedModID, setSelectedModID] = useState(null);
 
   useEffect(() => { loadTab(tab); }, [tab]);
 
@@ -81,6 +85,23 @@ export default function AuditLogPage() {
     const targetName = name(r.ModMemberID || r.MemberID).toLowerCase();
     return targetID.includes(q) || targetName.includes(q);
   });
+
+  if (selectedModID) {
+    return (
+      <section className="card">
+        <ModDetail
+          modID={selectedModID}
+          profiles={profiles}
+          setProfiles={setProfiles}
+          isDirector={user?.role === 'director'}
+          isManager={user?.role === 'manager'}
+          readOnly={true}
+          onBack={() => setSelectedModID(null)}
+          onRemove={null}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="card">
@@ -161,9 +182,14 @@ export default function AuditLogPage() {
                   Removed {fmtDate(mod.CreatedAt)} · by {name(mod.RemovedBy)}
                 </div>
               </div>
-              <button className="btn btn-blurple btn-sm" onClick={() => restoreMod(mod.MemberID)}>
-                Restore
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-sm" style={{ background: 'var(--discord-card)', color: 'var(--discord-text)', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setSelectedModID(mod.MemberID)}>
+                  View Profile
+                </button>
+                <button className="btn btn-blurple btn-sm" onClick={() => restoreMod(mod.MemberID)}>
+                  Restore
+                </button>
+              </div>
             </div>
           ))}
 

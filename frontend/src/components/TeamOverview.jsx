@@ -58,6 +58,7 @@ function buildChartData(messages, tickets, qa, voice) {
 export default function TeamOverview() {
   const { user } = useAuth();
   const isLoggedIn = user !== null && user !== undefined;
+  const isManagement = user?.role === 'manager' || user?.role === 'director';
 
   const [range, setRange] = useState('30d');
   const [customStart, setCustomStart] = useState('');
@@ -75,18 +76,24 @@ export default function TeamOverview() {
     if (range === 'custom' && (!customStart || !customEnd)) return;
     const q = buildQuery(getQueryParams(range, customStart, customEnd));
     setLoading(true);
+    const removedFetch = isManagement
+      ? fetch(`${BASE}/api/removed-mods`, { credentials: 'include' }).then(r => r.ok ? r.json() : [])
+      : Promise.resolve([]);
     Promise.all([
       fetch(`${BASE}/api/messages${q}`).then(r => r.ok ? r.json() : []),
       fetch(`${BASE}/api/tickets${q}`).then(r => r.ok ? r.json() : []),
       fetch(`${BASE}/api/qfs${q}`).then(r => r.ok ? r.json() : []),
       fetch(`${BASE}/api/voice${q}`).then(r => r.ok ? r.json() : []),
+      removedFetch,
     ])
-      .then(([messages, tickets, qa, voice]) => {
+      .then(([messages, tickets, qa, voice, removed]) => {
+        const removedIDs = new Set((Array.isArray(removed) ? removed : []).map(r => r.MemberID));
+        const exclude = id => !removedIDs.has(id);
         const data = buildChartData(
-          Array.isArray(messages) ? messages : [],
-          Array.isArray(tickets) ? tickets : [],
-          Array.isArray(qa) ? qa : [],
-          Array.isArray(voice) ? voice : [],
+          (Array.isArray(messages) ? messages : []).filter(r => exclude(r.member_id)),
+          (Array.isArray(tickets)  ? tickets  : []).filter(r => exclude(r.member_id)),
+          (Array.isArray(qa)       ? qa       : []).filter(r => exclude(r.member_id)),
+          (Array.isArray(voice)    ? voice    : []).filter(r => exclude(r.member_id)),
         );
         setChartData(data);
         setTotals({
@@ -98,7 +105,7 @@ export default function TeamOverview() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [range, customStart, customEnd]);
+  }, [range, customStart, customEnd, isManagement]);
 
   useEffect(() => {
     if (!isLoggedIn || viewMode !== 'mine' || !user) return;
