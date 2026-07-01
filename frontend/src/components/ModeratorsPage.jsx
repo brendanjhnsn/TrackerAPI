@@ -481,7 +481,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
                 <option value="1_on_1">1 on 1</option>
                 <option value="review">Review</option>
                 <option value="warning">Warning</option>
-                <option value="performance_plan">Action Plan</option>
+                <option value="action_plan">Action Plan</option>
               </select>
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>

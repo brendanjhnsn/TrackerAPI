@@ -614,9 +614,9 @@ func (m *Module) createModAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.ActionType {
-	case "1_on_1", "review", "warning", "performance_plan":
+	case "1_on_1", "review", "warning", "action_plan":
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action_type must be 1_on_1, review, warning, or performance_plan"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action_type must be \"1 on 1\", Review, Warning, or Action Plan"})
 		return
 	}
 	authorID, ok := auth.UserIDFromContext(r.Context())
