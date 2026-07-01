@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ViewSwitcher, BarChart, PieChart, CalendarHeatmap } from './StatsCharts';
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -79,6 +79,38 @@ export function DateRangePicker({ range, setRange, customStart, setCustomStart, 
   );
 }
 
+function AttachmentChip({ att, canDelete, onDelete }) {
+  const isImage = att.MimeType.startsWith('image/');
+  const url = `${BASE}/api/attachments/file?id=${att.ID}`;
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      background: 'var(--discord-bg)', borderRadius: 6, padding: '4px 8px', fontSize: 12,
+    }}>
+      {isImage ? (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <img src={url} alt={att.FileName}
+            style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+        </a>
+      ) : (
+        <a href={url} download={att.FileName}
+          style={{ color: 'var(--discord-blurple)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span>📎</span>
+          <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {att.FileName}
+          </span>
+        </a>
+      )}
+      {canDelete && (
+        <button
+          onClick={() => onDelete(att.ID)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--discord-muted)', padding: 0, fontSize: 16, lineHeight: 1 }}
+        >×</button>
+      )}
+    </div>
+  );
+}
+
 export default function ModDetail({ modID, profiles, setProfiles, isDirector, isManager, readOnly = false, onBack, onRemove }) {
   const [range, setRange]             = useState('30d');
   const [customStart, setCustomStart] = useState('');
@@ -114,6 +146,13 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const [actionSaving, setActionSaving] = useState(false);
+
+  const noteFileInputRef   = useRef(null);
+  const actionFileInputRef = useRef(null);
+  const [noteFiles, setNoteFiles]                 = useState([]);
+  const [actionFiles, setActionFiles]             = useState([]);
+  const [noteAttachments, setNoteAttachments]     = useState({});
+  const [actionAttachments, setActionAttachments] = useState({});
 
   useEffect(() => {
     if (range === 'custom' && (!customStart || !customEnd)) return;
@@ -178,7 +217,24 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
     setActionsLoading(true);
     fetch(`${BASE}/api/mod-actions?mod_id=${modID}`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
-      .then(list => setActions(Array.isArray(list) ? list : []))
+      .then(list => {
+        const arr = Array.isArray(list) ? list : [];
+        setActions(arr);
+        if (arr.length > 0) {
+          const ids = arr.map(a => a.ID).join(',');
+          fetch(`${BASE}/api/attachments?owner_type=action&owner_ids=${ids}`, { credentials: 'include' })
+            .then(r => r.ok ? r.json() : [])
+            .then(atts => {
+              const map = {};
+              for (const a of (Array.isArray(atts) ? atts : [])) {
+                if (!map[a.OwnerID]) map[a.OwnerID] = [];
+                map[a.OwnerID].push(a);
+              }
+              setActionAttachments(map);
+            })
+            .catch(() => {});
+        }
+      })
       .catch(() => setActions([]))
       .finally(() => setActionsLoading(false));
 
@@ -197,6 +253,20 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               for (const p of ps) next[p.id] = p;
               return next;
             }))
+            .catch(() => {});
+        }
+        if (arr.length > 0) {
+          const ids = arr.map(n => n.ID).join(',');
+          fetch(`${BASE}/api/attachments?owner_type=note&owner_ids=${ids}`, { credentials: 'include' })
+            .then(r => r.ok ? r.json() : [])
+            .then(atts => {
+              const map = {};
+              for (const a of (Array.isArray(atts) ? atts : [])) {
+                if (!map[a.OwnerID]) map[a.OwnerID] = [];
+                map[a.OwnerID].push(a);
+              }
+              setNoteAttachments(map);
+            })
             .catch(() => {});
         }
       })
@@ -249,6 +319,28 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
         setActionReason('');
         const _d = new Date();
         setActionDate(`${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`);
+        if (actionFiles.length > 0) {
+          const newAtts = [];
+          for (const file of actionFiles) {
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+              const uploadRes = await fetch(
+                `${BASE}/api/attachments?owner_type=action&owner_id=${created.ID}`,
+                { method: 'POST', credentials: 'include', body: fd }
+              );
+              if (uploadRes.ok) newAtts.push(await uploadRes.json());
+            } catch (_) {}
+          }
+          if (newAtts.length > 0) {
+            setActionAttachments(prev => ({
+              ...prev,
+              [created.ID]: [...(prev[created.ID] ?? []), ...newAtts],
+            }));
+          }
+          setActionFiles([]);
+          if (actionFileInputRef.current) actionFileInputRef.current.value = '';
+        }
       }
     } catch (_) {}
     setActionSaving(false);
@@ -279,6 +371,28 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
         const created = await res.json();
         setNotes(prev => [created, ...prev]);
         setNewNote('');
+        if (noteFiles.length > 0) {
+          const newAtts = [];
+          for (const file of noteFiles) {
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+              const uploadRes = await fetch(
+                `${BASE}/api/attachments?owner_type=note&owner_id=${created.ID}`,
+                { method: 'POST', credentials: 'include', body: fd }
+              );
+              if (uploadRes.ok) newAtts.push(await uploadRes.json());
+            } catch (_) {}
+          }
+          if (newAtts.length > 0) {
+            setNoteAttachments(prev => ({
+              ...prev,
+              [created.ID]: [...(prev[created.ID] ?? []), ...newAtts],
+            }));
+          }
+          setNoteFiles([]);
+          if (noteFileInputRef.current) noteFileInputRef.current.value = '';
+        }
       }
     } catch (_) {}
     setNoteSaving(false);
@@ -292,6 +406,21 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
       });
       if (res.status === 204) {
         setNotes(prev => prev.filter(n => n.ID !== id));
+      }
+    } catch (_) {}
+  }
+
+  async function deleteAttachment(ownerType, ownerID, id) {
+    try {
+      const res = await fetch(`${BASE}/api/attachments?id=${id}`, {
+        method: 'DELETE', credentials: 'include',
+      });
+      if (res.status === 204) {
+        const setter = ownerType === 'note' ? setNoteAttachments : setActionAttachments;
+        setter(prev => ({
+          ...prev,
+          [ownerID]: (prev[ownerID] ?? []).filter(a => a.ID !== id),
+        }));
       }
     } catch (_) {}
   }
@@ -521,9 +650,35 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               <textarea className="form-textarea" placeholder="Reason for action…" rows={2}
                 value={actionReason} onChange={e => setActionReason(e.target.value)} />
             </div>
-            <button type="submit" className="btn btn-blurple btn-sm" disabled={actionSaving}>
-              {actionSaving ? 'Adding…' : 'Log Action'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button type="submit" className="btn btn-blurple btn-sm" disabled={actionSaving}>
+                {actionSaving ? 'Adding…' : 'Log Action'}
+              </button>
+              <input
+                ref={actionFileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv"
+                style={{ display: 'none' }}
+                onChange={e => setActionFiles(Array.from(e.target.files))}
+              />
+              <button type="button" className="btn btn-muted btn-sm"
+                onClick={() => actionFileInputRef.current?.click()}>
+                📎 Attach files
+              </button>
+            </div>
+            {actionFiles.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {actionFiles.map((f, i) => (
+                  <span key={i} style={{ fontSize: 12, background: 'var(--discord-bg)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {f.name}
+                    <button type="button"
+                      onClick={() => setActionFiles(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--discord-muted)', padding: 0 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
           </form>
         )}
 
@@ -544,34 +699,48 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                 <div key={action.ID} style={{
                   background: 'var(--discord-card)', borderRadius: 6,
                   padding: '10px 14px', border: '1px solid rgba(255,255,255,0.05)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10,
                 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: action.Reason ? 4 : 0 }}>
-                      <span style={{
-                        fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                        background: badgeColor, color: '#fff', letterSpacing: 0.5,
-                      }}>
-                        {ACTION_TYPE_LABELS[action.ActionType] ?? action.ActionType.replace(/_/g, ' ').toUpperCase()}
-                      </span>
-                      <span style={{ fontSize: 12, color: 'var(--discord-muted)' }}>
-                        {fmtDate(action.IssuedAt)} · {profiles[action.AuthorMemberID]?.username || action.AuthorMemberID}
-                      </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: action.Reason ? 4 : 0 }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
+                          background: badgeColor, color: '#fff', letterSpacing: 0.5,
+                        }}>
+                          {ACTION_TYPE_LABELS[action.ActionType] ?? action.ActionType.replace(/_/g, ' ').toUpperCase()}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--discord-muted)' }}>
+                          {fmtDate(action.IssuedAt)} · {profiles[action.AuthorMemberID]?.username || action.AuthorMemberID}
+                        </span>
+                      </div>
+                      {action.Reason && (
+                        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                          {action.Reason}
+                        </p>
+                      )}
                     </div>
-                    {action.Reason && (
-                      <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                        {action.Reason}
-                      </p>
+                    {!readOnly && (isDirector || isManager) && (
+                      <button className="btn btn-red btn-sm" onClick={() => deleteAction(action.ID)}>
+                        Delete
+                      </button>
                     )}
                   </div>
-                  {!readOnly && (isDirector || isManager) && (
-                    <button className="btn btn-red btn-sm" onClick={() => deleteAction(action.ID)}>
-                      Delete
-                    </button>
+                  {(actionAttachments[action.ID] ?? []).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                      {(actionAttachments[action.ID] ?? []).map(att => (
+                        <AttachmentChip
+                          key={att.ID}
+                          att={att}
+                          canDelete={!readOnly && (isDirector || isManager)}
+                          onDelete={id => deleteAttachment('action', action.ID, id)}
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
               );
             })}
+
           </div>
         )}
       </section>
@@ -592,9 +761,35 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                 onChange={e => setNewNote(e.target.value)}
               />
             </div>
-            <button type="submit" className="btn btn-blurple btn-sm" disabled={noteSaving || !newNote.trim()}>
-              {noteSaving ? 'Adding…' : 'Add Note'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              <button type="submit" className="btn btn-blurple btn-sm" disabled={noteSaving || !newNote.trim()}>
+                {noteSaving ? 'Adding…' : 'Add Note'}
+              </button>
+              <input
+                ref={noteFileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.txt,.xlsx,.csv"
+                style={{ display: 'none' }}
+                onChange={e => setNoteFiles(Array.from(e.target.files))}
+              />
+              <button type="button" className="btn btn-muted btn-sm"
+                onClick={() => noteFileInputRef.current?.click()}>
+                📎 Attach files
+              </button>
+            </div>
+            {noteFiles.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {noteFiles.map((f, i) => (
+                  <span key={i} style={{ fontSize: 12, background: 'var(--discord-bg)', padding: '2px 8px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {f.name}
+                    <button type="button"
+                      onClick={() => setNoteFiles(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--discord-muted)', padding: 0 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
           </form>
         )}
 
@@ -622,6 +817,18 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--discord-muted)' }}>
                   {profiles[note.AuthorMemberID]?.username || note.AuthorMemberID} · {fmtTimestamp(note.CreatedAt)}
                 </p>
+                {(noteAttachments[note.ID] ?? []).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {(noteAttachments[note.ID] ?? []).map(att => (
+                      <AttachmentChip
+                        key={att.ID}
+                        att={att}
+                        canDelete={!readOnly && (isDirector || isManager)}
+                        onDelete={id => deleteAttachment('note', note.ID, id)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
