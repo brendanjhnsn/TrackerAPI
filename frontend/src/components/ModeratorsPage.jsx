@@ -379,33 +379,37 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
           </>
         )}
 
-        <p className="section-subtitle" style={{ marginTop: 16 }}>Moderation Actions Issued</p>
-        <div className="stat-cards">
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#faa61a' }}>
-              {issuedLoading ? '—' : issuedActions.warning}
+        {chartView === 'num' && (
+          <>
+            <p className="section-subtitle" style={{ marginTop: 16 }}>Moderation Actions Issued</p>
+            <div className="stat-cards">
+              <div className="stat-card">
+                <div className="stat-card-value" style={{ color: '#faa61a' }}>
+                  {issuedLoading ? '—' : issuedActions.warning}
+                </div>
+                <div className="stat-card-label">Warnings</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-value" style={{ color: '#ff7043' }}>
+                  {issuedLoading ? '—' : issuedActions.timeout}
+                </div>
+                <div className="stat-card-label">Timeouts</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-value" style={{ color: '#ff9800' }}>
+                  {issuedLoading ? '—' : issuedActions.kick}
+                </div>
+                <div className="stat-card-label">Kicks</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-card-value" style={{ color: '#f04747' }}>
+                  {issuedLoading ? '—' : issuedActions.ban}
+                </div>
+                <div className="stat-card-label">Bans</div>
+              </div>
             </div>
-            <div className="stat-card-label">Warnings</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#ff7043' }}>
-              {issuedLoading ? '—' : issuedActions.timeout}
-            </div>
-            <div className="stat-card-label">Timeouts</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#ff9800' }}>
-              {issuedLoading ? '—' : issuedActions.kick}
-            </div>
-            <div className="stat-card-label">Kicks</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-card-value" style={{ color: '#f04747' }}>
-              {issuedLoading ? '—' : issuedActions.ban}
-            </div>
-            <div className="stat-card-label">Bans</div>
-          </div>
-        </div>
+          </>
+        )}
       </section>
 
       {/* Training */}

@@ -145,9 +145,17 @@ type modPermissionRow struct {
 	Permissions map[string]bool `json:"permissions"`
 }
 
+// memberPermRow is used in allRolePermissionsResponse so that all three role
+// arrays share the same "member_id" field name. The older permissionRow (with
+// "manager_id") is kept for GET /api/manager-permissions backward compat.
+type memberPermRow struct {
+	MemberID    string          `json:"member_id"`
+	Permissions map[string]bool `json:"permissions"`
+}
+
 type allRolePermissionsResponse struct {
-	Directors []directorRow      `json:"directors"`
-	Managers  []permissionRow    `json:"managers"`
+	Directors []directorRow   `json:"directors"`
+	Managers  []memberPermRow `json:"managers"`
 	Mods      []modPermissionRow `json:"mods"`
 }
 
@@ -275,9 +283,9 @@ func (m *Module) getAllRolePermissions(w http.ResponseWriter, r *http.Request) {
 			row[p.Section] = p.Enabled
 		}
 	}
-	managers := make([]permissionRow, 0, len(managerIDs))
+	managers := make([]memberPermRow, 0, len(managerIDs))
 	for _, id := range managerIDs {
-		managers = append(managers, permissionRow{ManagerID: id, Permissions: mgrPermMap[id]})
+		managers = append(managers, memberPermRow{MemberID: id, Permissions: mgrPermMap[id]})
 	}
 
 	// Build mods (default all false, overlay DB values)
