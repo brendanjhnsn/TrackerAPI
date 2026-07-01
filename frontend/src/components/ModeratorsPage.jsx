@@ -517,6 +517,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
             {actions.map(action => {
               const badgeColor =
                 action.ActionType === 'performance_plan' ? '#ff0000'
+                : action.ActionType === 'action_plan'    ? 'var(--discord-red)'
                 : action.ActionType === 'warning'        ? 'var(--discord-yellow)'
                 : action.ActionType === 'review'         ? '#ff7043'
                 : '#7289da';
