@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 )
 
 type Config struct {
@@ -32,6 +33,19 @@ type Config struct {
 	GameLeadRoleID     string
 	GameLeadCategoryID string
 	UploadsDir string
+	Timezone   string
+}
+
+// TZ returns the configured timezone location, falling back to UTC on any error.
+func (c *Config) TZ() *time.Location {
+	if c.Timezone == "" || c.Timezone == "UTC" {
+		return time.UTC
+	}
+	loc, err := time.LoadLocation(c.Timezone)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
 }
 
 func Load() *Config {
@@ -62,6 +76,7 @@ func Load() *Config {
 		GameLeadRoleID:     getEnv("GAME_LEAD_ROLE_ID", ""),
 		GameLeadCategoryID: getEnv("GAME_LEAD_CATEGORY_ID", ""),
 		UploadsDir: getEnv("UPLOADS_DIR", "uploads"),
+		Timezone:   getEnv("TIMEZONE", "UTC"),
 	}
 }
 

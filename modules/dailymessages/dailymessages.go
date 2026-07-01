@@ -50,8 +50,8 @@ func (m *Module) onMessageCreate(s *discordgo.Session, msg *discordgo.MessageCre
 		return
 	}
 
-	today := time.Now().UTC()
-	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	now := time.Now().In(m.cfg.TZ())
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	var dm database.DailyMessage
 	result := m.db.Where("guild_id = ? AND member_id = ? AND date = ?", msg.GuildID, msg.Author.ID, today).First(&dm)
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {

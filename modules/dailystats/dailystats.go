@@ -24,6 +24,23 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/daily-stats", m.handleDailyStats)
 }
 
+// dateExpr returns a SQL expression that extracts the calendar date from col,
+// applying the configured timezone so late-evening activity lands on the correct day.
+// Only safe timezone name characters are allowed; falls back to plain DATE() on bad input.
+func (m *Module) dateExpr(col string) string {
+	tz := m.cfg.Timezone
+	if tz == "" || tz == "UTC" {
+		return "DATE(" + col + ")"
+	}
+	for _, c := range tz {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '/' || c == '_' || c == '-' || c == '+') {
+			return "DATE(" + col + ")"
+		}
+	}
+	return "DATE(" + col + " AT TIME ZONE '" + tz + "')"
+}
+
 type DayStats struct {
 	Date       string  `json:"date"`
 	Messages   int     `json:"messages"`
@@ -115,11 +132,12 @@ func (m *Module) handleDailyStats(w http.ResponseWriter, r *http.Request) {
 			Total int       `gorm:"column:total"`
 		}
 		var rows []row
+		dateE := m.dateExpr("first_resp_date")
 		tx := m.db.Model(&database.Ticket{}).
-			Select("DATE(first_resp_date) as date, COUNT(*) as total").
+			Select(dateE+" as date, COUNT(*) as total").
 			Where("first_resp_date >= ? AND first_resp_date <= ?", startDate, endDate).
 			Where("first_resp_id IS NOT NULL").
-			Group("DATE(first_resp_date)")
+			Group(dateE)
 		if memberID != "" {
 			tx = tx.Where("first_resp_id = ?", memberID)
 		}
@@ -139,7 +157,7 @@ func (m *Module) handleDailyStats(w http.ResponseWriter, r *http.Request) {
 		var rows []row
 		tx := m.db.Model(&database.QuestionCheck{}).
 			Select("DATE(date) as date, COUNT(*) as total").
-			Where("date >= ? AND date <= ?", startDate, endDate).
+			Where("date >= ? AND date <= ? AND removed_at IS NULL", startDate, endDate).
 			Group("DATE(date)")
 		if memberID != "" {
 			tx = tx.Where("member_id = ?", memberID)
@@ -158,11 +176,12 @@ func (m *Module) handleDailyStats(w http.ResponseWriter, r *http.Request) {
 			TotalSeconds int64     `gorm:"column:total_seconds"`
 		}
 		var rows []row
+		dateE := m.dateExpr("joined_at")
 		tx := m.db.Model(&database.VoiceTime{}).
-			Select("DATE(joined_at) as date, SUM(duration) as total_seconds").
+			Select(dateE+" as date, SUM(duration) as total_seconds").
 			Where("joined_at >= ? AND joined_at <= ?", startDate, endDate).
 			Where("duration > 0").
-			Group("DATE(joined_at)")
+			Group(dateE)
 		if memberID != "" {
 			tx = tx.Where("member_id = ?", memberID)
 		}
@@ -181,10 +200,11 @@ func (m *Module) handleDailyStats(w http.ResponseWriter, r *http.Request) {
 			Total      int       `gorm:"column:total"`
 		}
 		var rows []row
+		dateE := m.dateExpr("issued_at")
 		tx := m.db.Model(&database.ModIssuedAction{}).
-			Select("DATE(issued_at) as date, action_type, COUNT(*) as total").
+			Select(dateE+" as date, action_type, COUNT(*) as total").
 			Where("issued_at >= ? AND issued_at <= ?", startDate, endDate).
-			Group("DATE(issued_at), action_type")
+			Group(dateE + ", action_type")
 		if memberID != "" {
 			tx = tx.Where("mod_member_id = ?", memberID)
 		}

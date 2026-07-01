@@ -141,7 +141,7 @@ func (m *Module) onReactionAdd(s *discordgo.Session, r *discordgo.MessageReactio
 	var existing database.QuestionCheck
 	err = m.db.Where("question_id = ? AND member_id = ? AND removed_at IS NULL", q.ID, r.UserID).First(&existing).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		now := time.Now().UTC()
+		now := time.Now().In(m.cfg.TZ())
 		dateOnly := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 		qc := database.QuestionCheck{
 			QuestionID: q.ID,
