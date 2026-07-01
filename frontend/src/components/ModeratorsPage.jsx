@@ -31,7 +31,7 @@ function buildQ(params) {
 
 function fmtDate(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString();
+  return new Date(iso).toLocaleDateString(undefined, { timeZone: 'UTC' });
 }
 
 function toDateInput(iso) {
