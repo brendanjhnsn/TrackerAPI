@@ -35,12 +35,20 @@ export default function Header({ currentPage, setCurrentPage }) {
               </button>
             )}
             {isDirector && (
-              <button
-                className={`header-nav-btn${currentPage === 'permissions' ? ' active' : ''}`}
-                onClick={() => setCurrentPage('permissions')}
-              >
-                Permissions
-              </button>
+              <>
+                <button
+                  className={`header-nav-btn${currentPage === 'audit_log' ? ' active' : ''}`}
+                  onClick={() => setCurrentPage('audit_log')}
+                >
+                  Audit Log
+                </button>
+                <button
+                  className={`header-nav-btn${currentPage === 'permissions' ? ' active' : ''}`}
+                  onClick={() => setCurrentPage('permissions')}
+                >
+                  Permissions
+                </button>
+              </>
             )}
           </nav>
         )}

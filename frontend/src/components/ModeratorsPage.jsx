@@ -81,7 +81,7 @@ function DateRangePicker({ range, setRange, customStart, setCustomStart, customE
 }
 
 // ---- Detail view shown when a mod is clicked ----
-function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove }) {
+function ModDetail({ modID, profiles, setProfiles, isDirector, isManager, onBack, onRemove }) {
   const [range, setRange]             = useState('30d');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd]     = useState('');
@@ -551,7 +551,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
                       </p>
                     )}
                   </div>
-                  {isDirector && (
+                  {(isDirector || isManager) && (
                     <button className="btn btn-red btn-sm" onClick={() => deleteAction(action.ID)}>
                       Delete
                     </button>
@@ -598,7 +598,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
                   <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', flex: 1 }}>
                     {note.Content}
                   </p>
-                  {isDirector && (
+                  {(isDirector || isManager) && (
                     <button className="btn btn-red btn-sm" onClick={() => deleteNote(note.ID)}>
                       Delete
                     </button>
@@ -620,6 +620,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
 export default function ModeratorsPage() {
   const { user } = useAuth();
   const isDirector = user?.role === 'director';
+  const isManager  = user?.role === 'manager';
 
   const [data, setData]             = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -715,6 +716,7 @@ export default function ModeratorsPage() {
           profiles={profiles}
           setProfiles={setProfiles}
           isDirector={isDirector}
+          isManager={isManager}
           onBack={() => { setSelectedModID(null); setConfirmRemove(null); }}
           onRemove={handleRemoveMod}
         />

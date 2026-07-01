@@ -1,2 +1,4 @@
 .env
 docs/*
+.superpowers/
+.dockerignore

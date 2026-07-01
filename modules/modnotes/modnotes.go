@@ -297,6 +297,8 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/removed-mods", m.handleRemovedMods)
 	mux.HandleFunc("/api/mod-actions", m.handleModActions)
 	mux.HandleFunc("/api/mod-issued-actions", m.handleModIssuedActions)
+	mux.HandleFunc("/api/audit-log", m.handleAuditLog)
+	mux.HandleFunc("/api/mod-restore", m.handleModRestore)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -344,7 +346,7 @@ func (m *Module) getNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var notes []database.ModNote
-	if err := m.db.Where("mod_member_id = ?", modID).Order("created_at desc").Find(&notes).Error; err != nil {
+	if err := m.db.Where("mod_member_id = ? AND deleted_at IS NULL", modID).Order("created_at desc").Find(&notes).Error; err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
@@ -391,10 +393,11 @@ func (m *Module) createNote(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) deleteNote(w http.ResponseWriter, r *http.Request) {
 	role, ok := auth.RoleFromContext(r.Context())
-	if !ok || role != auth.RoleDirector {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only directors can delete notes"})
+	if !ok || (role != auth.RoleManager && role != auth.RoleDirector) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "manager or director role required"})
 		return
 	}
+	authorID, _ := auth.UserIDFromContext(r.Context())
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
@@ -405,7 +408,10 @@ func (m *Module) deleteNote(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
-	result := m.db.Delete(&database.ModNote{}, id)
+	now := time.Now().UTC()
+	result := m.db.Model(&database.ModNote{}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		Updates(map[string]any{"deleted_at": now, "deleted_by": authorID})
 	if result.Error != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete note"})
 		return
@@ -541,6 +547,7 @@ func (m *Module) addRemovedMod(w http.ResponseWriter, r *http.Request) {
 	if _, ok := m.requireSection(w, r, "moderators"); !ok {
 		return
 	}
+	authorID, _ := auth.UserIDFromContext(r.Context())
 	var req removeModRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -550,7 +557,7 @@ func (m *Module) addRemovedMod(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "member_id is required"})
 		return
 	}
-	removed := database.RemovedMod{MemberID: req.MemberID}
+	removed := database.RemovedMod{MemberID: req.MemberID, RemovedBy: authorID}
 	if err := m.db.Where("member_id = ?", req.MemberID).FirstOrCreate(&removed).Error; err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove mod"})
 		return
@@ -583,7 +590,7 @@ func (m *Module) getModActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var actions []database.ModAction
-	if err := m.db.Where("mod_member_id = ?", modID).Order("issued_at desc").Find(&actions).Error; err != nil {
+	if err := m.db.Where("mod_member_id = ? AND deleted_at IS NULL", modID).Order("issued_at desc").Find(&actions).Error; err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
@@ -649,10 +656,11 @@ func (m *Module) createModAction(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) deleteModAction(w http.ResponseWriter, r *http.Request) {
 	role, ok := auth.RoleFromContext(r.Context())
-	if !ok || role != auth.RoleDirector {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "only directors can delete actions"})
+	if !ok || (role != auth.RoleManager && role != auth.RoleDirector) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "manager or director role required"})
 		return
 	}
+	authorID, _ := auth.UserIDFromContext(r.Context())
 	idStr := r.URL.Query().Get("id")
 	if idStr == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
@@ -663,13 +671,127 @@ func (m *Module) deleteModAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
 		return
 	}
-	result := m.db.Delete(&database.ModAction{}, id)
+	now := time.Now().UTC()
+	result := m.db.Model(&database.ModAction{}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		Updates(map[string]any{"deleted_at": now, "deleted_by": authorID})
 	if result.Error != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete action"})
 		return
 	}
 	if result.RowsAffected == 0 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "action not found"})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ----- Audit Log -----
+
+func (m *Module) handleAuditLog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	role, ok := auth.RoleFromContext(r.Context())
+	if !ok || role != auth.RoleDirector {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "director role required"})
+		return
+	}
+	logType := r.URL.Query().Get("type")
+	search := r.URL.Query().Get("search")
+	switch logType {
+	case "notes":
+		m.getDeletedNotes(w, search)
+	case "actions":
+		m.getDeletedActions(w, search)
+	case "removed_mods":
+		m.getActiveRemovedMods(w, search)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "type must be \"notes\", \"actions\", or \"removed_mods\""})
+	}
+}
+
+func (m *Module) getDeletedNotes(w http.ResponseWriter, search string) {
+	query := m.db.Where("deleted_at IS NOT NULL")
+	if search != "" {
+		query = query.Where("mod_member_id LIKE ?", "%"+search+"%")
+	}
+	var notes []database.ModNote
+	if err := query.Order("deleted_at desc").Find(&notes).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if notes == nil {
+		notes = []database.ModNote{}
+	}
+	writeJSON(w, http.StatusOK, notes)
+}
+
+func (m *Module) getDeletedActions(w http.ResponseWriter, search string) {
+	query := m.db.Where("deleted_at IS NOT NULL")
+	if search != "" {
+		query = query.Where("mod_member_id LIKE ?", "%"+search+"%")
+	}
+	var actions []database.ModAction
+	if err := query.Order("deleted_at desc").Find(&actions).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if actions == nil {
+		actions = []database.ModAction{}
+	}
+	writeJSON(w, http.StatusOK, actions)
+}
+
+func (m *Module) getActiveRemovedMods(w http.ResponseWriter, search string) {
+	query := m.db.Where("restored_at IS NULL")
+	if search != "" {
+		query = query.Where("member_id LIKE ?", "%"+search+"%")
+	}
+	var mods []database.RemovedMod
+	if err := query.Order("created_at desc").Find(&mods).Error; err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+	if mods == nil {
+		mods = []database.RemovedMod{}
+	}
+	writeJSON(w, http.StatusOK, mods)
+}
+
+// ----- Mod Restore -----
+
+type restoreModRequest struct {
+	MemberID string `json:"member_id"`
+}
+
+func (m *Module) handleModRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	role, ok := auth.RoleFromContext(r.Context())
+	if !ok || role != auth.RoleDirector {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "director role required"})
+		return
+	}
+	authorID, _ := auth.UserIDFromContext(r.Context())
+	var req restoreModRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.MemberID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "member_id is required"})
+		return
+	}
+	now := time.Now().UTC()
+	result := m.db.Model(&database.RemovedMod{}).
+		Where("member_id = ? AND restored_at IS NULL", req.MemberID).
+		Updates(map[string]any{"restored_at": now, "restored_by": authorID})
+	if result.Error != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to restore mod"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "mod not found or already restored"})
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

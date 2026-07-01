@@ -76,10 +76,12 @@ type Session struct {
 }
 
 type ModNote struct {
-	ID             uint      `gorm:"primaryKey"`
-	ModMemberID    string    `gorm:"index;not null"`
-	AuthorMemberID string    `gorm:"not null"`
-	Content        string    `gorm:"type:text;not null"`
+	ID             uint       `gorm:"primaryKey"`
+	ModMemberID    string     `gorm:"index;not null"`
+	AuthorMemberID string     `gorm:"not null"`
+	Content        string     `gorm:"type:text;not null"`
+	DeletedAt      *time.Time `gorm:"index"`
+	DeletedBy      string
 	CreatedAt      time.Time
 }
 
@@ -93,18 +95,23 @@ type ModTraining struct {
 }
 
 type RemovedMod struct {
-	ID        uint      `gorm:"primaryKey"`
-	MemberID  string    `gorm:"uniqueIndex;not null"`
-	CreatedAt time.Time
+	ID         uint       `gorm:"primaryKey"`
+	MemberID   string     `gorm:"uniqueIndex;not null"`
+	RemovedBy  string
+	RestoredAt *time.Time
+	RestoredBy string
+	CreatedAt  time.Time
 }
 
 type ModAction struct {
-	ID             uint      `gorm:"primaryKey"`
-	ModMemberID    string    `gorm:"index;not null"`
-	AuthorMemberID string    `gorm:"not null"`
-	ActionType     string    `gorm:"not null"` // "1_on_1", "review", "warning", "performance_plan"
-	Reason         string    `gorm:"type:text"`
-	IssuedAt       time.Time `gorm:"not null"`
+	ID             uint       `gorm:"primaryKey"`
+	ModMemberID    string     `gorm:"index;not null"`
+	AuthorMemberID string     `gorm:"not null"`
+	ActionType     string     `gorm:"not null"`
+	Reason         string     `gorm:"type:text"`
+	IssuedAt       time.Time  `gorm:"not null"`
+	DeletedAt      *time.Time `gorm:"index"`
+	DeletedBy      string
 	CreatedAt      time.Time
 }
 

@@ -8,6 +8,7 @@ import ManagementPanel from './components/ManagementPanel';
 import GameLeadsPage from './components/GameLeadsPage';
 import ModeratorsPage from './components/ModeratorsPage';
 import PermissionsPage from './components/PermissionsPage';
+import AuditLogPage from './components/AuditLogPage';
 
 function AppContent() {
   const { user } = useAuth();
@@ -25,6 +26,8 @@ function AppContent() {
           <ModeratorsPage />
         ) : currentPage === 'permissions' && user?.role === 'director' ? (
           <PermissionsPage />
+        ) : currentPage === 'audit_log' && user?.role === 'director' ? (
+          <AuditLogPage />
         ) : (
           <>
             <TeamOverview />
