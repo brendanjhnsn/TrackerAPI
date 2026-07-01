@@ -76,7 +76,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
   const [statsLoading, setStatsLoading] = useState(false);
   const [issuedActions, setIssuedActions]       = useState({ warning: 0, timeout: 0, kick: 0, ban: 0 });
   const [issuedLoading, setIssuedLoading]       = useState(false);
-  const [chartView, setChartView]             = useState('bar');
+  const [chartView, setChartView]             = useState('num');
   const [calendarData, setCalendarData]       = useState([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
 
