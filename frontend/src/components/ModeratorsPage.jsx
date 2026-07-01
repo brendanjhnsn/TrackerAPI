@@ -4,6 +4,14 @@ import { ViewSwitcher, BarChart, PieChart, CalendarHeatmap } from './StatsCharts
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
+const ACTION_TYPE_LABELS = {
+  '1_on_1':          '1 On 1',
+  'review':          'REVIEW',
+  'warning':         'WARNING',
+  'action_plan':     'ACTION PLAN',
+  'performance_plan':'PERFORMANCE PLAN',
+};
+
 const PRESETS = [
   { key: '7d',     label: '7 days' },
   { key: '30d',    label: '30 days' },
@@ -478,7 +486,7 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
                 value={actionType}
                 onChange={e => setActionType(e.target.value)}
               >
-                <option value="1_on_1">1 on 1</option>
+                <option value="1_on_1">1 On 1</option>
                 <option value="review">Review</option>
                 <option value="warning">Warning</option>
                 <option value="action_plan">Action Plan</option>
@@ -522,9 +530,9 @@ function ModDetail({ modID, profiles, setProfiles, isDirector, onBack, onRemove 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: action.Reason ? 4 : 0 }}>
                       <span style={{
                         fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                        background: badgeColor, color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5,
+                        background: badgeColor, color: '#fff', letterSpacing: 0.5,
                       }}>
-                        {action.ActionType}
+                        {ACTION_TYPE_LABELS[action.ActionType] ?? action.ActionType.replace(/_/g, ' ').toUpperCase()}
                       </span>
                       <span style={{ fontSize: 12, color: 'var(--discord-muted)' }}>
                         {fmtDate(action.IssuedAt)} · {profiles[action.AuthorMemberID]?.username || action.AuthorMemberID}
