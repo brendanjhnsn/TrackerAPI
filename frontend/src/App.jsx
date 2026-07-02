@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Header from './components/Header';
@@ -10,11 +10,29 @@ import ModeratorsPage from './components/ModeratorsPage';
 import PermissionsPage from './components/PermissionsPage';
 import AuditLogPage from './components/AuditLogPage';
 
+const VALID_PAGES = ['home', 'moderators', 'game_leads', 'audit_log', 'permissions'];
+
+function pageFromHash() {
+  const p = window.location.hash.slice(1).split('/')[0];
+  return VALID_PAGES.includes(p) ? p : 'home';
+}
+
 function AppContent() {
   const { user } = useAuth();
   const isLoggedIn = user !== null && user !== undefined;
   const isManagement = user?.role === 'manager' || user?.role === 'director';
-  const [currentPage, setCurrentPage] = useState('home');
+  const [currentPage, setCurrentPageState] = useState(pageFromHash);
+
+  useEffect(() => {
+    const onHash = () => setCurrentPageState(pageFromHash());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  function setCurrentPage(page) {
+    window.location.hash = page;
+    setCurrentPageState(page);
+  }
 
   return (
     <div className="app">

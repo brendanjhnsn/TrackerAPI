@@ -4,6 +4,11 @@ import ModDetail, { DateRangePicker, getQueryParams, buildQ } from './ModDetail'
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
+function modFromHash() {
+  const parts = window.location.hash.slice(1).split('/');
+  return parts[0] === 'moderators' && parts[1] ? parts[1] : null;
+}
+
 // ---- Mod list page ----
 export default function ModeratorsPage() {
   const { user } = useAuth();
@@ -20,7 +25,26 @@ export default function ModeratorsPage() {
   const [sortCol, setSortCol]       = useState('messages');
   const [sortDir, setSortDir]       = useState('desc');
   const [confirmRemove, setConfirmRemove] = useState(null);
-  const [selectedModID, setSelectedModID] = useState(null);
+  const [selectedModID, setSelectedModIDState] = useState(modFromHash);
+
+  useEffect(() => {
+    const onHash = () => {
+      const parts = window.location.hash.slice(1).split('/');
+      if (parts[0] === 'moderators') setSelectedModIDState(parts[1] || null);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  function selectMod(id) {
+    window.location.hash = `moderators/${id}`;
+    setSelectedModIDState(id);
+  }
+
+  function clearMod() {
+    window.location.hash = 'moderators';
+    setSelectedModIDState(null);
+  }
 
   // Load removed mods
   useEffect(() => {
@@ -105,7 +129,7 @@ export default function ModeratorsPage() {
           setProfiles={setProfiles}
           isDirector={isDirector}
           isManager={isManager}
-          onBack={() => { setSelectedModID(null); setConfirmRemove(null); }}
+          onBack={() => { clearMod(); setConfirmRemove(null); }}
           onRemove={handleRemoveMod}
         />
       </section>
@@ -160,7 +184,7 @@ export default function ModeratorsPage() {
                     <button
                       style={{ background: 'none', border: 'none', color: 'var(--discord-text)',
                         cursor: 'pointer', padding: 0, fontSize: 14, fontWeight: 500 }}
-                      onClick={() => setSelectedModID(row.member_id)}
+                      onClick={() => selectMod(row.member_id)}
                     >
                       {profiles[row.member_id]?.username || row.member_id}
                     </button>
@@ -186,7 +210,7 @@ export default function ModeratorsPage() {
                     ) : (
                       <>
                         <button className="btn btn-blurple btn-sm"
-                          onClick={() => setSelectedModID(row.member_id)}>
+                          onClick={() => selectMod(row.member_id)}>
                           View
                         </button>
                         <button className="btn btn-red btn-sm"

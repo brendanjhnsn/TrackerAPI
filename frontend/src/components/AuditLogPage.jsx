@@ -23,14 +23,38 @@ const TABS = [
   { key: 'removed_mods', label: 'Removed Mods' },
 ];
 
+const VALID_AUDIT_TABS = ['notes', 'actions', 'removed_mods'];
+
+function tabFromHash() {
+  const parts = window.location.hash.slice(1).split('/');
+  return parts[0] === 'audit_log' && VALID_AUDIT_TABS.includes(parts[1]) ? parts[1] : 'notes';
+}
+
 export default function AuditLogPage() {
   const { user } = useAuth();
-  const [tab, setTab]           = useState('notes');
+  const [tab, setTabState]      = useState(tabFromHash);
   const [search, setSearch]     = useState('');
   const [data, setData]         = useState([]);
   const [loading, setLoading]   = useState(false);
   const [profiles, setProfiles] = useState({});
   const [selectedModID, setSelectedModID] = useState(null);
+
+  useEffect(() => {
+    const onHash = () => {
+      const parts = window.location.hash.slice(1).split('/');
+      if (parts[0] === 'audit_log') {
+        const t = VALID_AUDIT_TABS.includes(parts[1]) ? parts[1] : 'notes';
+        setTabState(t);
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  function setTab(t) {
+    window.location.hash = `audit_log/${t}`;
+    setTabState(t);
+  }
 
   useEffect(() => { loadTab(tab); }, [tab]);
 
@@ -119,7 +143,7 @@ export default function AuditLogPage() {
         {TABS.map(t => (
           <button
             key={t.key}
-            onClick={() => { setTab(t.key); setSearch(''); }}
+            onClick={() => { setTab(t.key); setSearch(''); setSelectedModID(null); }}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               padding: '8px 16px', fontSize: 13, fontWeight: tab === t.key ? 600 : 400,
