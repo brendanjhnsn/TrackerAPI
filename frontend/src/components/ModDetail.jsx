@@ -225,6 +225,8 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
   const [noteModalOpen, setNoteModalOpen] = useState(false);
 
   const [selectedItem, setSelectedItem] = useState(null); // { type: 'note'|'action', data }
+  const [detailAtts, setDetailAtts]     = useState([]);
+  const [detailAttsLoading, setDetailAttsLoading] = useState(false);
 
   const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -291,6 +293,20 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
   }, [actionModalOpen]);
+
+  // Re-fetch attachments from the API every time the detail modal opens.
+  // This ensures we always show the real DB state, not stale in-memory state.
+  useEffect(() => {
+    if (!selectedItem) { setDetailAtts([]); return; }
+    const ownerType = selectedItem.type === 'action' ? 'action' : 'note';
+    const id = selectedItem.data.ID;
+    setDetailAttsLoading(true);
+    fetch(`${BASE}/api/attachments?owner_type=${ownerType}&owner_ids=${id}`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => setDetailAtts(Array.isArray(list) ? list : []))
+      .catch(() => setDetailAtts([]))
+      .finally(() => setDetailAttsLoading(false));
+  }, [selectedItem]);
 
   useEffect(() => {
     if (range === 'custom' && (!customStart || !customEnd)) return;
@@ -482,6 +498,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
       if (res.ok) {
         const created = await res.json();
         setActions(prev => [created, ...prev]);
+        const uploadFailed = [];
         if (actionFiles.length > 0) {
           const newAtts = [];
           for (const file of actionFiles) {
@@ -492,8 +509,15 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                 `${BASE}/api/attachments?owner_type=action&owner_id=${created.ID}`,
                 { method: 'POST', credentials: 'include', body: fd }
               );
-              if (uploadRes.ok) newAtts.push(await uploadRes.json());
-            } catch (_) {}
+              if (uploadRes.ok) {
+                newAtts.push(await uploadRes.json());
+              } else {
+                const errText = await uploadRes.text().catch(() => uploadRes.status);
+                uploadFailed.push({ name: file.name, reason: errText });
+              }
+            } catch (err) {
+              uploadFailed.push({ name: file.name, reason: 'network error' });
+            }
           }
           if (newAtts.length > 0) {
             setActionAttachments(prev => ({
@@ -504,6 +528,10 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
         }
         const _d = new Date();
         setActionDate(`${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`);
+        if (uploadFailed.length > 0) {
+          alert(`Action saved, but ${uploadFailed.length} file(s) failed to upload:\n` +
+            uploadFailed.map(f => `• ${f.name}: ${f.reason}`).join('\n'));
+        }
         closeActionModal();
       }
     } catch (_) {}
@@ -534,6 +562,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
       if (res.ok) {
         const created = await res.json();
         setNotes(prev => [created, ...prev]);
+        const uploadFailed = [];
         if (noteFiles.length > 0) {
           const newAtts = [];
           for (const file of noteFiles) {
@@ -544,8 +573,15 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                 `${BASE}/api/attachments?owner_type=note&owner_id=${created.ID}`,
                 { method: 'POST', credentials: 'include', body: fd }
               );
-              if (uploadRes.ok) newAtts.push(await uploadRes.json());
-            } catch (_) {}
+              if (uploadRes.ok) {
+                newAtts.push(await uploadRes.json());
+              } else {
+                const errText = await uploadRes.text().catch(() => uploadRes.status);
+                uploadFailed.push({ name: file.name, reason: errText });
+              }
+            } catch (err) {
+              uploadFailed.push({ name: file.name, reason: 'network error' });
+            }
           }
           if (newAtts.length > 0) {
             setNoteAttachments(prev => ({
@@ -553,6 +589,10 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               [created.ID]: [...(prev[created.ID] ?? []), ...newAtts],
             }));
           }
+        }
+        if (uploadFailed.length > 0) {
+          alert(`Note saved, but ${uploadFailed.length} file(s) failed to upload:\n` +
+            uploadFailed.map(f => `• ${f.name}: ${f.reason}`).join('\n'));
         }
         closeNoteModal();
       }
@@ -618,6 +658,7 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
           ...prev,
           [ownerID]: (prev[ownerID] ?? []).filter(a => a.ID !== id),
         }));
+        setDetailAtts(prev => prev.filter(a => a.ID !== id));
       }
     } catch (_) {}
   }
@@ -1142,7 +1183,6 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
             : action.ActionType === 'warning'        ? 'var(--discord-yellow)'
             : action.ActionType === 'review'         ? '#ff7043'
             : '#7289da';
-          const atts = actionAttachments[action.ID] ?? [];
           return (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -1161,30 +1201,25 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
                   {action.Reason}
                 </p>
               )}
-              {atts.length > 0 && (
+              {detailAttsLoading ? (
+                <p style={{ fontSize: 13, color: 'var(--discord-muted)' }}>Loading attachments…</p>
+              ) : detailAtts.length > 0 ? (
                 <div>
                   <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--discord-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Attachments ({atts.length})
+                    Attachments ({detailAtts.length})
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {atts.map(att => (
+                    {detailAtts.map(att => (
                       <DetailAttachment
                         key={att.ID}
                         att={att}
                         canDelete={canManage}
-                        onDelete={id => {
-                          deleteAttachment('action', action.ID, id);
-                          setSelectedItem(prev => prev
-                            ? { ...prev, data: prev.data }
-                            : null
-                          );
-                        }}
+                        onDelete={id => deleteAttachment('action', action.ID, id)}
                       />
                     ))}
                   </div>
                 </div>
-              )}
-              {atts.length === 0 && (
+              ) : (
                 <p style={{ fontSize: 13, color: 'var(--discord-muted)' }}>No attachments.</p>
               )}
             </div>
@@ -1193,7 +1228,6 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
 
         {selectedItem?.type === 'note' && (() => {
           const note = selectedItem.data;
-          const atts = noteAttachments[note.ID] ?? [];
           return (
             <div>
               <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--discord-muted)' }}>
@@ -1202,26 +1236,25 @@ export default function ModDetail({ modID, profiles, setProfiles, isDirector, is
               <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                 {note.Content}
               </p>
-              {atts.length > 0 && (
+              {detailAttsLoading ? (
+                <p style={{ fontSize: 13, color: 'var(--discord-muted)' }}>Loading attachments…</p>
+              ) : detailAtts.length > 0 ? (
                 <div>
                   <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--discord-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Attachments ({atts.length})
+                    Attachments ({detailAtts.length})
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {atts.map(att => (
+                    {detailAtts.map(att => (
                       <DetailAttachment
                         key={att.ID}
                         att={att}
                         canDelete={canManage}
-                        onDelete={id => {
-                          deleteAttachment('note', note.ID, id);
-                        }}
+                        onDelete={id => deleteAttachment('note', note.ID, id)}
                       />
                     ))}
                   </div>
                 </div>
-              )}
-              {atts.length === 0 && (
+              ) : (
                 <p style={{ fontSize: 13, color: 'var(--discord-muted)' }}>No attachments.</p>
               )}
             </div>

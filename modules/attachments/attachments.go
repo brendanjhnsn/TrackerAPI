@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,6 +31,23 @@ var allowedMIME = map[string]bool{
 	"text/csv":     true,
 	"application/vnd.ms-excel": true,
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+}
+
+// extMIME maps file extensions to MIME types for formats that http.DetectContentType
+// cannot distinguish (e.g. .docx/.xlsx are ZIP archives internally).
+var extMIME = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".pdf":  "application/pdf",
+	".doc":  "application/msword",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".xls":  "application/vnd.ms-excel",
+	".csv":  "text/csv",
+	".txt":  "text/plain",
 }
 
 type Module struct {
@@ -159,18 +175,16 @@ func (m *Module) handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	// DetectContentType returns "application/zip" for .docx/.xlsx because they are ZIP archives.
-	// Fall back to extension-based detection for types that sniffing cannot distinguish.
+	// DetectContentType returns "application/zip" for .docx/.xlsx (ZIP-based formats)
+	// and "application/octet-stream" for .doc. Use the hardcoded extension map as a
+	// fallback so uploads aren't rejected for types the sniffer can't distinguish.
 	if !allowedMIME[mimeType] {
-		if extMIME := mime.TypeByExtension(filepath.Ext(header.Filename)); extMIME != "" {
-			if idx := strings.Index(extMIME, ";"); idx != -1 {
-				extMIME = strings.TrimSpace(extMIME[:idx])
-			}
-			mimeType = extMIME
+		if mapped, ok := extMIME[strings.ToLower(filepath.Ext(header.Filename))]; ok {
+			mimeType = mapped
 		}
 	}
 	if !allowedMIME[mimeType] {
-		http.Error(w, "file type not allowed", http.StatusUnprocessableEntity)
+		http.Error(w, "file type not allowed: "+mimeType, http.StatusUnprocessableEntity)
 		return
 	}
 
