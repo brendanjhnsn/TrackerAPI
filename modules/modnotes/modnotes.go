@@ -621,9 +621,9 @@ func (m *Module) createModAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.ActionType {
-	case "1_on_1", "review", "warning", "action_plan":
+	case "1_on_1", "review", "warning", "action_plan", "performance_plan":
 	default:
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action_type must be \"1_on_1\", \"review\", \"warning\", or \"action_plan\""})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action_type must be one of: 1_on_1, review, warning, action_plan, performance_plan"})
 		return
 	}
 	authorID, ok := auth.UserIDFromContext(r.Context())
@@ -713,7 +713,7 @@ func (m *Module) handleAuditLog(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) getDeletedNotes(w http.ResponseWriter, search string) {
-	query := m.db.Where("deleted_at IS NOT NULL")
+	query := m.db.Unscoped().Where("deleted_at IS NOT NULL")
 	if search != "" {
 		query = query.Where("mod_member_id LIKE ?", "%"+search+"%")
 	}
@@ -729,7 +729,7 @@ func (m *Module) getDeletedNotes(w http.ResponseWriter, search string) {
 }
 
 func (m *Module) getDeletedActions(w http.ResponseWriter, search string) {
-	query := m.db.Where("deleted_at IS NOT NULL")
+	query := m.db.Unscoped().Where("deleted_at IS NOT NULL")
 	if search != "" {
 		query = query.Where("mod_member_id LIKE ?", "%"+search+"%")
 	}
